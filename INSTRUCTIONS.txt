@@ -1,0 +1,67 @@
+2018-12-01 Directions to use make_concentration_graphs.py
+
+Python libraries that you need to have installed:
+pandas
+numpy
+matplotlib
+scipy
+
+If you use the Anaconda Python, you may just be able to type "conda install pandas" to install the packages automatically.
+If you use another Python installation and have pip3 installed, you can type "pip3 install pandas" to install the packages automatically.
+__________________________________________________________
+
+Open Terminal
+
+cd to directory with make_concentration_graphs.py
+
+run this:
+
+	python3 ./make_concentration_graphs.py [input]
+
+where [input] is:
+
+REQUIRED:
+	path_to_folder_with_metadata_and_summary_file (e.g. /Users/jon/analysis/SMAD_experiment)
+
+	IMPORTANT: Folder must contain 2 excel files:
+			1. Metadata file that specifies samples, plot groups, and colors. It is important that the image_name rows
+			   match the order of the rows in the summary file (2) because I do not do any search and just assume the 
+			   rows are the same. Must have 'metadata' in the Excel file name. 
+				plot_group is a number where all samples with same plot_group will go together on same plot. 
+				color is a code that corresponds to the color and marker type. 
+				Available colors are: b, g, r, c, m, y, k, w corresponding to blue, green, red, cyan, magenta, yellow, black, white
+				Available markers are here: <https://matplotlib.org/api/markers_api.html#module-matplotlib.markers>  
+				(e.g. bo is blue circle; g. is green point)
+
+			2. Summary data file that contains the partition ratio, condensed fraction, or total intensity data for each set of images. Must have 'summary' in Excel file name
+
+OPTIONAL:
+
+--o : Output directory name to use. Default is the name of the metadata folder with "_output" added to the end. In both cases, the output directory will be stored in the same directory where the metadata and summary file are stored.
+
+--i : column name to use from summary file to plot. Defaults to Partition_ratio_mean_488
+	IMPORTANT: If you use --i, you must also use --s
+--s : column name to use from summary file for standard deviation to plot. Defaults to Partition_ratio_std488
+	IMPORTANT: If you use --s, you must also use --i
+
+--l : label for x-axis. Defaults to [protein] (µM)
+
+--p : parameters for exponential fit. Write --p a b c. Defaults to 1.0 0.001 1000
+
+--no-threshold : Flag that includes all raw data. If you don't provide --no-threshold, then all values less than 1 will be set to zero (Default behavior). This is the case where partition ratios less than 1 are meaningless.
+
+--no-fit : Flag that does not include or do exponential curve fitting. You may want to set this if you don't want the exponential curve to be plotted.
+
+
+______________TEST___________________
+
+To make sure pipeline is working:
+
+Open Terminal
+
+cd to directory with make_concentration_graphs.py
+python3 ./make_concentration_graphs.py ./test_SMAD3 --o test_results --l [SMAD3]
+
+OR
+
+python3 /full_path_on_your_computer/make_concentration_graphs.py /full_path_on_your_computer/test_SMAD3 --o test_results --l [SMAD3]
