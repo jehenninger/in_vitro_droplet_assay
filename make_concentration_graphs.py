@@ -132,7 +132,8 @@ def generate_graph(metadata_dir, output_dirs, input_args):
 
                 plt.plot(x_values, exponential_curve(x_values, *popt), line_color)
 
-        plt.legend()
+        if input_args.legend_flag:
+            plt.legend()
 
         plt.gca().autoscale(enable=True, axis='y')
         y_bottom, y_top = plt.ylim()
@@ -170,8 +171,9 @@ parser.add_argument("--l", type=str)  # label for x-axis. Defaults to '[protein]
 parser.add_argument('--p', nargs='+', type=float)  # parameters for exponential fit. Write '--p a b c'. Defaults to [1.0, 0.001, 1000].
 parser.add_argument('--no-threshold', dest='threshold_flag', action='store_false')  # whether to set all PRs < 1 to 0. Default True.
 parser.add_argument('--no-fit', dest='fit_flag', action='store_false')   # whether to fit exponential curve. Default True.
+parser.add_argument('--no-legend', dest='legend_flag', action='store_false')
 
-parser.set_defaults(threshold_flag=True, fit_flag=True)
+parser.set_defaults(threshold_flag=True, fit_flag=True, legend_flag=True)
 
 input_args = parser.parse_args()
 
