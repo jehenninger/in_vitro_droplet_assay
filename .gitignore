@@ -1,2 +1,4 @@
 venv
 .idea
+.DS_Store
+make_concentration_graphs_JEH.zip
