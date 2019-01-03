@@ -1,4 +1,4 @@
-from skimage import io, filters, measure, color, exposure, morphology, feature, img_as_float, img_as_uint
+from skimage import io, filters, measure, color, exposure, morphology, feature, img_as_float, img_as_uint, draw
 from scipy import ndimage as ndi
 import pandas as pd
 import numpy as np
@@ -122,14 +122,14 @@ def analyze_replicate(metadata, input_args):
     if input_args.bsub_flag:
 
         if scaffold_image_flag:
-            scaffold_bsub, scaffold_bg_peak = subtract_background(scaffold)
+            scaffold, scaffold_bg_peak = subtract_background(scaffold)
 
         if client_image_flag:
-            client_bsub, client_bg_peak = subtract_background(client)
+            client, client_bg_peak = subtract_background(client)
 
         if avg_image_flag:
-            scaffold_bsub, scaffold_bg_peak = subtract_background(scaffold)
-            client_a_bsub, client_a_bg_peak = subtract_background(client_a)
+            scaffold, scaffold_bg_peak = subtract_background(scaffold)
+            client_a, client_a_bg_peak = subtract_background(client_a)
             client_b_bsub, client_b_bg_peak = subtract_background(client_b)
 
     # make binary image of scaffold with threshold intensity. Threshold is multiplier of std above background
@@ -164,35 +164,70 @@ def analyze_replicate(metadata, input_args):
     if num_of_channels == 1:
         replicate_output = pd.DataFrame(columns = ['sample', 'replicate', 'droplet_id', 'subset_I_'+str(channels),
                                                    'mean_I_' + str(channels), 'max_I_' + str(channels),
-                                                   'area', 'centroid_x', 'centroid_y', 'circularity'])
+                                                   'area', 'centroid_r', 'centroid_c', 'circularity'])
     elif num_of_channels == 2:
         replicate_output = pd.DataFrame(columns = ['sample', 'replicate', 'droplet_id',
                                                    'subset_I_'+str(channels[0]), 'subset_I_'+str(channels[1]),
                                                    'mean_I_' + str(channels[0]), 'mean_I_' + str(channels[1]),
                                                    'max_I_' + str(channels)[0], 'max_I_' + str(channels)[1],
-                                                   'area', 'centroid_x', 'centroid_y', 'circularity'])
+                                                   'area', 'centroid_r', 'centroid_c', 'circularity'])
 
     for i, region in enumerate(scaffold_filtered_regionprops):
         s = sample_name
         r = replicate_name
         droplet_id = i
-        coords_x, coords_y = region.coords
-
+        area = region.area
+        centroid_r, centroid_c = region.centroid
+        circularity = circ(region)
+        coords_r, coords_c = region.coords
+        subset_coords_r, subset_coords_c = draw.circle(r=centroid_r, c=centroid_c,
+                                                       radius=round(math.sqrt(min_area_threshold)))
         if num_of_channels == 1:
-            mean_intensity = region.mean_intensity
-            max_intensity = region.max_intensity
-            area = region.area
-            centroid_x, centroid_y = region.centroid
-            circularity = circ(region)
+            mean_intensity = region.mean_intensity * 65536
+            max_intensity = region.max_intensity * 65536
+            subset_intensity = np.mean(scaffold[subset_coords_c, subset_coords_r]) * 65536
 
+            replicate_output = replicate_output.append({'sample': s, 'replicate': r,
+                                                        'droplet_id': droplet_id,
+                                                        'subset_I_' + str(channels): subset_intensity,
+                                                        'mean_I_' + str(channels): mean_intensity,
+                                                        'max_I_' + str(channels): max_intensity,
+                                                        'area': area, 'centroid_r': centroid_r, 'centroid_c': centroid_c,
+                                                        'circularity': circularity},
+                                                       ignore_index=True)
 
+        elif num_of_channels == 2:
+            mean_intensity_a = np.mean(client_a[coords_r, coords_c]) * 65536
+            mean_intensity_b = np.mean(client_b[coords_r, coords_c]) * 65536
 
-        replicate_output = replicate_output.append({'sample': , 'replicate': ,
-                                                    'droplet_id': , },
-                                                    ignore_index=True)
+            max_intensity_a = np.max(client_a[coords_r, coords_c]) * 65536
+            max_intensity_b = np.max(client_b[coords_r, coords_c]) * 65536
 
+            subset_intensity_a = np.mean(client_a[subset_coords_c, subset_coords_r]) * 65536
+            subset_intensity_b = np.mean(client_b[subset_coords_c, subset_coords_r]) * 65536
+
+            replicate_output = replicate_output.append({'sample': s, 'replicate': r, 'droplet_id': droplet_id,
+                                                        'subset_I_'+str(channels[0]): subset_intensity_a,
+                                                        'subset_I_'+str(channels[1]): subset_intensity_b,
+                                                        'mean_I_' + str(channels[0]): mean_intensity_a,
+                                                        'mean_I_' + str(channels[1]): mean_intensity_b,
+                                                        'max_I_' + str(channels)[0]: max_intensity_a,
+                                                        'max_I_' + str(channels)[1]: max_intensity_b,
+                                                        'area': area, 'centroid_r': centroid_r, 'centroid_c': centroid_c,
+                                                        'circularity': circularity},
+                                                       ignore_index=True)
 
     # get measurements of bulk regions excluding droplets
+    bulk_mask = np.invert(scaffold_mask)
+    bulk_I = []
+    if num_of_channels == 1:
+        bulk_I.append(np.mean(scaffold[bulk_mask]))
+    elif num_of_channels == 2:
+        bulk_I.append(np.mean(client_a[bulk_mask]))
+        bulk_I.append(np.mean(client_b[bulk_mask]))
+
+    return replicate_output, bulk_I
+
 
 def subtract_background(input_image):
     image_hist = np.histogram(input_image, bins='auto')
@@ -203,5 +238,5 @@ def subtract_background(input_image):
     return output_image, background_threshold
 
 
-def analyze_sample(metadata, input_args):
-    sys.exit(0)  # @Remove
+def analyze_sample(metadata, input_args, replicate_output, bulk_I):
+    sys.exit(0)

@@ -59,21 +59,19 @@ for s in samples:
     replicates = np.unique(metadata_sample['replicate'])
     num_of_replicates = len(replicates)
 
+    replicate_output = []
+    bulk_I = []
     for r in replicates:
         # print('replicate: ', r)
 
         metadata_replicate = metadata_sample[metadata_sample['replicate'] == r].copy()
 
-        helper.analyze_replicate(metadata_replicate, input_args)
+        temp_rep, temp_bulk = helper.analyze_replicate(metadata_replicate, input_args)
+        replicate_output.append(temp_rep)
+        bulk_I.append(temp_bulk)
 
-# load images
+    helper.analyze_sample(metadata, input_args, replicate_output, bulk_I)
 
-    # background subtract
 
-    # define illumination region (circle of specific diameter)
 
-    # define scaffold or do average scaffold
-
-    # identify droplets
-
-    # filter droplets by intensity, size, circularity
+# OUTPUT PARAMETERS USED FOR ANALYSIS TO TEXT FILE IN FOLDER
