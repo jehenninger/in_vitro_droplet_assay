@@ -1,0 +1,21 @@
+from Lin, Parker et al. Molecular Cell 2015:
+
+Background intensity subtraction
+Used an image of a homogenous soultion to correct for uneven illumination.
+Droplet intensities were measured by averaging the intensities at the center (with a diameter of 2.5 µm smaller than
+that of the droplets) from at least three areas.
+For bulk intensities, identical samples were prepared and centrifuged then imaged. It is unclear if they actually called
+"droplets" in the bulk analysis.
+Intensities were converted to concentrations through a standard curve. There was no info on how this standard curve
+was generated.
+The partition coefficient is defined as [GFP]droplet/[GFP]bulk and shown as mean +- SD from three measurements. I assume
+these were 3 independent droplet assays.
+
+from Banani, Rosen et al. Cell 2016
+
+Background correction by substracting dark images.
+Spinning disk also corrected for non-uniform illumination by normalizing to images of uniformly fluorescent samples
+Identified droplets by intensity thresholds. Regions within 2 µm of the droplet edges were ignored. Also set min and
+max size thresholds for the droplets.
+Intensities from all included regions of droplets or bulk phases were averaged and used to calculate molecule and module
+concentrations in the two phases using an intensity v concentration standard curve.
