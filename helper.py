@@ -1,3 +1,4 @@
+from skimage import io, filters, measure, color, exposure, morphology, feature, img_as_float, img_as_uint
 import pandas as pd
 import numpy as np
 import os
@@ -8,14 +9,14 @@ from matplotlib import pyplot as plt
 import argparse
 import json
 from datetime import datetime
-from skimage import io, filters, measure, color, exposure, morphology, feature, img_as_float, img_as_uint
 
 
 def read_metadata(input_args):
     metadata_path = input_args.metadata_path
 
     if not os.path.isdir(metadata_path):
-        sys.exit('ERROR: Could not read or find  metadata file')
+        print('ERROR: Could not read or find  metadata file')
+        sys.exit(0)
 
     metadata_dir = os.path.dirname(metadata_path)
     metadata_name = os.path.splitext(metadata_path)[0]
@@ -33,6 +34,7 @@ def read_metadata(input_args):
     metadata = pd.read_excel(metadata_path)
 
     return metadata, output_dirs
+
 
 def analyze_replicate(metadata, input_args):
 
@@ -60,31 +62,29 @@ def analyze_replicate(metadata, input_args):
                 client = io.imread(client_image_path)
                 client_image_flag = True
 
-
-
     elif type(input_args.s) is str:
         if input_args.s is 'avg':
+            sys.exit(0)  # @Remove
             # do average scaffold here @Jon START HERE!
 
     else:
         print('ERROR: Could not identify scaffold parameter for replicate ', metadata['replicate'][0], ' in sample ', metadata['experiment_name'][0])
         sys.exit(0)
 
-    #  define illumination region
-    lum_mask = np.full(shape=(scaffold.shape[0], scaffold.shape[1]), fill_value=False, dtype=bool)
+    #  define crop region
+    crop_mask = np.full(shape=(scaffold.shape[0], scaffold.shape[1]), fill_value=False, dtype=bool)
 
     if input_args.crop:
         c_width = input_args.crop
         center_coord = scaffold.shape[0]/2
-        lum_mask[range(center_coord-c_width, center_coord+c_width), range(center_coord-c_width, center_coord+c_width)] = True
+        crop_mask[range(center_coord-c_width, center_coord+c_width), range(center_coord-c_width, center_coord+c_width)] = True
     else:
-        lum_mask.fill(True)
+        crop_mask.fill(True)
 
-    scaffold = scaffold(lum_mask)
+    scaffold = scaffold(crop_mask)
 
     if client_image_flag:
-        client = client(lum_mask)
-
+        client = client(crop_mask)
 
     if input_args.bsub_flag:
 
@@ -94,10 +94,14 @@ def analyze_replicate(metadata, input_args):
         if client_image_flag:
             client_bsub = subtract_background(client)
 
+
 def subtract_background(input_image):
-
     image_hist = np.histogram(input_image, bins='auto')
-
     background_threshold = np.argmax(image_hist)  # assumes that the max hist peak corresponds to background pixels
+    output_image = input_image - background_threshold
+
+    return output_image
+
 
 def analyze_sample(metadata, input_args):
+    sys.exit(0)  # @Remove

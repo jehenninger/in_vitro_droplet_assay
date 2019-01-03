@@ -1,3 +1,4 @@
+import helper
 import pandas as pd
 import numpy as np
 import os
@@ -9,8 +10,6 @@ import argparse
 import json
 from datetime import datetime
 from skimage import io, filters, measure, color, exposure, morphology, feature, img_as_float, img_as_uint
-import helper
-
 
 
 # metadata has the following columns:
