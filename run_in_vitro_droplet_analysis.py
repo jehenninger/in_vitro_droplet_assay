@@ -61,6 +61,7 @@ for s in samples:
 
     replicate_output = []
     bulk_I = []
+    # replicate_writer = pd.ExcelWriter(os.path.join(input)) @JON START HERE
     for r in replicates:
         # print('replicate: ', r)
 
@@ -70,7 +71,7 @@ for s in samples:
         replicate_output.append(temp_rep)
         bulk_I.append(temp_bulk)
 
-    helper.analyze_sample(metadata, input_args, replicate_output, bulk_I)
+    helper.analyze_sample(metadata_sample, input_args, replicate_output, bulk_I)
 
 
 

@@ -239,4 +239,6 @@ def subtract_background(input_image):
 
 
 def analyze_sample(metadata, input_args, replicate_output, bulk_I):
-    sys.exit(0)
+    sample_name = np.unique(metadata['experiment_name'])
+    channels = np.unique(metadata['channel'])
+    num_of_channels = len(channels)
