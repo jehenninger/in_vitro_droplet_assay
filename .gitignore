@@ -4,3 +4,4 @@ venv
 make_concentration_graphs_JEH.zip
 *.TIF
 *.xlsx
+*.pyc

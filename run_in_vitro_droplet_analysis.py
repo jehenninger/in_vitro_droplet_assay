@@ -3,9 +3,10 @@ import pandas as pd
 import numpy as np
 import os
 import sys
-import matplotlib
-matplotlib.use('Agg')
-from matplotlib import pyplot as plt
+#import matplotlib
+# matplotlib.use('Agg')
+# matplotlib.use('Qt5Agg')
+# from matplotlib import pyplot as plt
 import argparse
 import json
 from datetime import datetime
@@ -27,7 +28,7 @@ from skimage import io, filters, measure, color, exposure, morphology, feature, 
 
 # parse input
 parser = argparse.ArgumentParser()
-parser.add_argument("metadata_path")
+# parser.add_argument("metadata_path")  # @Temporary
 parser.add_argument("--o", type=str)  # optional output directory name
 parser.add_argument("--tm", type=float, default=3.0)  # optional threshold multiplier. Defaults to 3. Multiplies std plus background peak
 parser.add_argument("--min_a", type=float, default=9.0)  # optional threshold for minimum droplet area
@@ -42,8 +43,8 @@ parser.add_argument('--no-bsub', dest='bsub_flag', action='store_false', default
 input_args = parser.parse_args()
 
 # load and check metadata
-
-metadata, output_dirs = helper.read_metadata(input_args)
+metadata_path = '/Users/jon/PycharmProjects/in_vitro_droplet_assay/test_MED_CTD/metadata.xlsx'
+metadata, output_dirs = helper.read_metadata(input_args, metadata_path)  # @Temporary
 
 # get number of unique experiments
 samples = np.unique(metadata['experiment_name'])
@@ -59,17 +60,26 @@ for s in samples:
     replicates = np.unique(metadata_sample['replicate'])
     num_of_replicates = len(replicates)
 
-    replicate_output = []
-    bulk_I = []
-    # replicate_writer = pd.ExcelWriter(os.path.join(input)) @JON START HERE
+    replicate_writer = pd.ExcelWriter(os.path.join(output_dirs['output_individual'], 'individual_droplet_output.xlsx'),
+                                      engine='xlsxwriter')
+    count = 0
     for r in replicates:
         # print('replicate: ', r)
 
         metadata_replicate = metadata_sample[metadata_sample['replicate'] == r].copy()
 
         temp_rep, temp_bulk = helper.analyze_replicate(metadata_replicate, input_args)
-        replicate_output.append(temp_rep)
-        bulk_I.append(temp_bulk)
+
+        if count == 0:
+            replicate_output = temp_rep
+            bulk_I = temp_bulk
+            count = count + 1
+        else:
+            replicate_output = replicate_output.append(temp_rep)
+            bulk_I = bulk_I.append(temp_bulk)
+            count = count + 1
+
+    replicate_output.to_excel(replicate_writer, sheet_name=s)
 
     helper.analyze_sample(metadata_sample, input_args, replicate_output, bulk_I)
 

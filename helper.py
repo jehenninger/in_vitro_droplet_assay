@@ -6,6 +6,7 @@ import os
 import sys
 import math
 import matplotlib
+# matplotlib.use('Qt5Agg')
 matplotlib.use('Agg')
 from matplotlib import pyplot as plt
 import argparse
@@ -14,25 +15,32 @@ from datetime import datetime
 
 circ = lambda r: (4 * math.pi * r.area) / (r.perimeter * r.perimeter)
 
-def read_metadata(input_args):
-    metadata_path = input_args.metadata_path
 
-    if not os.path.isdir(metadata_path):
-        print('ERROR: Could not read or find  metadata file')
-        sys.exit(0)
+def read_metadata(input_args, metadata_path):
+    # metadata_path = input_args.metadata_path
 
     metadata_dir = os.path.dirname(metadata_path)
     metadata_name = os.path.splitext(metadata_path)[0]
 
-    output_dirs = []
+    if not os.path.isdir(metadata_dir) or not os.path.isfile(metadata_path):
+        print('ERROR: Could not read or find  metadata file')
+        sys.exit(0)
 
     if input_args.o:
-        output_dirs.append(os.path.join(metadata_dir, input_args.o))
+        output_parent_dir = os.path.join(metadata_dir, input_args.o)
+        # output_dirs.append(os.path.join(metadata_dir, input_args.o))
     else:
-        output_dirs.append(os.path.join(metadata_dir, metadata_name + '_output'))
+        output_parent_dir = os.path.join(metadata_dir, metadata_name + '_output')
+        # output_dirs.append(os.path.join(metadata_dir, metadata_name + '_output'))
 
-    if not os.path.isdir(output_dirs[0]):
-        os.mkdir(output_dirs[0])
+    output_dirs = {'output_parent': output_parent_dir,
+                   'output_individual': os.path.join(output_parent_dir, 'individual'),
+                   'output_summary': os.path.join(output_parent_dir, 'summary')}
+
+    # make folders if they don't exist
+    for folder in output_dirs:
+        if not os.path.isdir(folder):
+            os.mkdir(folder)
 
     metadata = pd.read_excel(metadata_path)
 
@@ -40,9 +48,9 @@ def read_metadata(input_args):
 
 
 def analyze_replicate(metadata, input_args):
-    sample_name = np.unique(metadata['experiment_name'])
-    replicate_name = np.unique(metadata['replicate'])
-    channels = np.unique(metadata['channel'])
+    sample_name = np.unique(metadata['experiment_name'])[0]
+    replicate_name = np.unique(metadata['replicate'])[0]
+    channels = np.unique(metadata['channel_id'])
     num_of_channels = len(channels)
 
     if num_of_channels > 2:
@@ -59,12 +67,12 @@ def analyze_replicate(metadata, input_args):
 
         for idx, c in enumerate(channels):
             if scaffold_test[idx]:
-                scaffold_image_path = metadata[idx]['image_path'].copy()
+                scaffold_image_path = metadata['image_path'][idx]
                 scaffold = io.imread(scaffold_image_path)
                 scaffold = img_as_float(scaffold)
                 scaffold_image_flag = True
             else:
-                client_image_path = metadata[idx]['image_path'].copy()
+                client_image_path = metadata['image_path'][idx]
                 client = io.imread(client_image_path)
                 client = img_as_float(client)
                 client_image_flag = True
@@ -74,12 +82,12 @@ def analyze_replicate(metadata, input_args):
             for idx, c in enumerate(channels):
                 count = 0
                 if idx == 0:
-                    avg_image = io.imread(metadata[idx]['image_path'].copy())
+                    avg_image = io.imread(metadata['image_path'][idx])
                     avg_image = img_as_float(avg_image)
                     client_a = avg_image
                     count = count + 1
                 else:
-                    image_to_add = io.imread(metadata[idx]['image_path'].copy())
+                    image_to_add = io.imread(metadata['image_path'][idx])
                     image_to_add = img_as_float(image_to_add)
                     client_b = image_to_add
 
@@ -102,17 +110,18 @@ def analyze_replicate(metadata, input_args):
         c_width = input_args.crop
         center_coord = scaffold.shape[0]/2
         crop_mask[range(center_coord-c_width, center_coord+c_width), range(center_coord-c_width, center_coord+c_width)] = True
+        crop_shape = (2*c_width, 2*c_width)
     else:
         crop_mask.fill(True)
+        crop_shape = scaffold.shape
 
-    scaffold = scaffold(crop_mask)
-
+    scaffold = scaffold[crop_mask].reshape(crop_shape)
     if client_image_flag:
-        client = client(crop_mask)
+        client = client[crop_mask].reshape(crop_shape)
 
     if avg_image_flag:
-        client_a = client_a(crop_mask)
-        client_b = client_b(crop_mask)
+        client_a = client_a[crop_mask].reshape(crop_shape)
+        client_b = client_b[crop_mask].reshape(crop_shape)
 
     # find std of image for later thresholding @Important before background subtraction
     scaffold_std = np.std(scaffold)
@@ -134,10 +143,15 @@ def analyze_replicate(metadata, input_args):
 
     # make binary image of scaffold with threshold intensity. Threshold is multiplier of std above background
     # @Important only add to background peak if we haven't subtracted background
+    binary_mask = np.full(shape=(scaffold.shape[0], scaffold.shape[1]), fill_value=False, dtype=bool)
+    scaffold_binary = np.full(shape=(scaffold.shape[0], scaffold.shape[1]), fill_value= False, dtype=bool)
+
     if input_args.bsub_flag:
-        scaffold_binary = scaffold[scaffold > (threshold_multiplier * scaffold_std)]
+        binary_mask[scaffold > (threshold_multiplier * scaffold_std)] = True
+        scaffold_binary[binary_mask] = True
     else:
-        scaffold_binary = scaffold[scaffold > (scaffold_bg_peak + (threshold_multiplier * scaffold_std))]
+        binary_mask[scaffold > (scaffold_bg_peak + (threshold_multiplier * scaffold_std))] = True
+        scaffold_binary[binary_mask] = True
 
     scaffold_binary = ndi.morphology.binary_fill_holes(scaffold_binary)
     scaffold_binary_labeled = measure.label(scaffold_binary)
@@ -179,7 +193,9 @@ def analyze_replicate(metadata, input_args):
         area = region.area
         centroid_r, centroid_c = region.centroid
         circularity = circ(region)
-        coords_r, coords_c = region.coords
+        coordinates = region.coords
+        coords_r = coordinates[:, 0]
+        coords_c = coordinates[:, 1]
         subset_coords_r, subset_coords_c = draw.circle(r=centroid_r, c=centroid_c,
                                                        radius=round(math.sqrt(min_area_threshold)))
         if num_of_channels == 1:
@@ -230,15 +246,19 @@ def analyze_replicate(metadata, input_args):
 
 
 def subtract_background(input_image):
-    image_hist = np.histogram(input_image, bins='auto')
-    background_threshold = np.argmax(image_hist)  # assumes that the max hist peak corresponds to background pixels
+    image_hist, image_bin_edges = np.histogram(input_image, bins='auto')
+    background_threshold = image_bin_edges[np.argmax(image_hist)]  # assumes that the max hist peak corresponds to background pixels
     output_image = input_image - background_threshold
     output_image[output_image < 0] = 0
 
+    # output_image = np.reshape(output_image, input_image.shape)
     return output_image, background_threshold
 
 
 def analyze_sample(metadata, input_args, replicate_output, bulk_I):
     sample_name = np.unique(metadata['experiment_name'])
-    channels = np.unique(metadata['channel'])
+    channels = np.unique(metadata['channel_id'])
     num_of_channels = len(channels)
+
+    if num_of_channels == 1:
+        print('Done')
