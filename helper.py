@@ -21,6 +21,7 @@ def read_metadata(input_args, metadata_path):
 
     metadata_dir = os.path.dirname(metadata_path)
     metadata_name = os.path.splitext(metadata_path)[0]
+    metadata_name = os.path.basename(metadata_name)
 
     if not os.path.isdir(metadata_dir) or not os.path.isfile(metadata_path):
         print('ERROR: Could not read or find  metadata file')
@@ -38,9 +39,14 @@ def read_metadata(input_args, metadata_path):
                    'output_summary': os.path.join(output_parent_dir, 'summary')}
 
     # make folders if they don't exist
-    for folder in output_dirs:
-        if not os.path.isdir(folder):
-            os.mkdir(folder)
+    if not os.path.isdir(output_parent_dir):
+        os.mkdir(output_parent_dir)
+
+    for key, folder in output_dirs.items():
+        if key is not 'output_parent':
+            if not os.path.isdir(folder):
+                os.mkdir(folder)
+
 
     metadata = pd.read_excel(metadata_path)
 
@@ -183,7 +189,7 @@ def analyze_replicate(metadata, input_args):
         replicate_output = pd.DataFrame(columns = ['sample', 'replicate', 'droplet_id',
                                                    'subset_I_'+str(channels[0]), 'subset_I_'+str(channels[1]),
                                                    'mean_I_' + str(channels[0]), 'mean_I_' + str(channels[1]),
-                                                   'max_I_' + str(channels)[0], 'max_I_' + str(channels)[1],
+                                                   'max_I_' + str(channels[0]), 'max_I_' + str(channels[1]),
                                                    'area', 'centroid_r', 'centroid_c', 'circularity'])
 
     for i, region in enumerate(scaffold_filtered_regionprops):
@@ -198,49 +204,56 @@ def analyze_replicate(metadata, input_args):
         coords_c = coordinates[:, 1]
         subset_coords_r, subset_coords_c = draw.circle(r=centroid_r, c=centroid_c,
                                                        radius=round(math.sqrt(min_area_threshold)))
-        if num_of_channels == 1:
-            mean_intensity = region.mean_intensity * 65536
-            max_intensity = region.max_intensity * 65536
-            subset_intensity = np.mean(scaffold[subset_coords_c, subset_coords_r]) * 65536
 
-            replicate_output = replicate_output.append({'sample': s, 'replicate': r,
-                                                        'droplet_id': droplet_id,
-                                                        'subset_I_' + str(channels): subset_intensity,
-                                                        'mean_I_' + str(channels): mean_intensity,
-                                                        'max_I_' + str(channels): max_intensity,
-                                                        'area': area, 'centroid_r': centroid_r, 'centroid_c': centroid_c,
-                                                        'circularity': circularity},
-                                                       ignore_index=True)
+        # in cases where droplets are near the edge, the circle will go beyond the image. In that case,
+        # we simply ignore the droplet
+        edge_r_test = all(0 < r < scaffold.shape[0] for r in subset_coords_r)
+        edge_c_test = all(0 < c < scaffold.shape[1] for c in subset_coords_c)
 
-        elif num_of_channels == 2:
-            mean_intensity_a = np.mean(client_a[coords_r, coords_c]) * 65536
-            mean_intensity_b = np.mean(client_b[coords_r, coords_c]) * 65536
+        if edge_r_test and edge_c_test:
+            if num_of_channels == 1:
+                mean_intensity = region.mean_intensity * 65536
+                max_intensity = region.max_intensity * 65536
+                subset_intensity = np.mean(scaffold[subset_coords_c, subset_coords_r]) * 65536
 
-            max_intensity_a = np.max(client_a[coords_r, coords_c]) * 65536
-            max_intensity_b = np.max(client_b[coords_r, coords_c]) * 65536
+                replicate_output = replicate_output.append({'sample': s, 'replicate': r,
+                                                            'droplet_id': droplet_id,
+                                                            'subset_I_' + str(channels): subset_intensity,
+                                                            'mean_I_' + str(channels): mean_intensity,
+                                                            'max_I_' + str(channels): max_intensity,
+                                                            'area': area, 'centroid_r': centroid_r, 'centroid_c': centroid_c,
+                                                            'circularity': circularity},
+                                                           ignore_index=True)
 
-            subset_intensity_a = np.mean(client_a[subset_coords_c, subset_coords_r]) * 65536
-            subset_intensity_b = np.mean(client_b[subset_coords_c, subset_coords_r]) * 65536
+            elif num_of_channels == 2:
+                mean_intensity_a = np.mean(client_a[coords_r, coords_c]) * 65536
+                mean_intensity_b = np.mean(client_b[coords_r, coords_c]) * 65536
 
-            replicate_output = replicate_output.append({'sample': s, 'replicate': r, 'droplet_id': droplet_id,
-                                                        'subset_I_'+str(channels[0]): subset_intensity_a,
-                                                        'subset_I_'+str(channels[1]): subset_intensity_b,
-                                                        'mean_I_' + str(channels[0]): mean_intensity_a,
-                                                        'mean_I_' + str(channels[1]): mean_intensity_b,
-                                                        'max_I_' + str(channels)[0]: max_intensity_a,
-                                                        'max_I_' + str(channels)[1]: max_intensity_b,
-                                                        'area': area, 'centroid_r': centroid_r, 'centroid_c': centroid_c,
-                                                        'circularity': circularity},
-                                                       ignore_index=True)
+                max_intensity_a = np.max(client_a[coords_r, coords_c]) * 65536
+                max_intensity_b = np.max(client_b[coords_r, coords_c]) * 65536
+
+                subset_intensity_a = np.mean(client_a[subset_coords_r, subset_coords_c]) * 65536
+                subset_intensity_b = np.mean(client_b[subset_coords_r, subset_coords_c]) * 65536
+
+                replicate_output = replicate_output.append({'sample': s, 'replicate': r, 'droplet_id': droplet_id,
+                                                            'subset_I_'+str(channels[0]): subset_intensity_a,
+                                                            'subset_I_'+str(channels[1]): subset_intensity_b,
+                                                            'mean_I_' + str(channels[0]): mean_intensity_a,
+                                                            'mean_I_' + str(channels[1]): mean_intensity_b,
+                                                            'max_I_' + str(channels[0]): max_intensity_a,
+                                                            'max_I_' + str(channels[1]): max_intensity_b,
+                                                            'area': area, 'centroid_r': centroid_r, 'centroid_c': centroid_c,
+                                                            'circularity': circularity},
+                                                           ignore_index=True)
 
     # get measurements of bulk regions excluding droplets
     bulk_mask = np.invert(scaffold_mask)
     bulk_I = []
     if num_of_channels == 1:
-        bulk_I.append(np.mean(scaffold[bulk_mask]))
+        bulk_I.append(np.mean(scaffold[bulk_mask]) * 65536)
     elif num_of_channels == 2:
-        bulk_I.append(np.mean(client_a[bulk_mask]))
-        bulk_I.append(np.mean(client_b[bulk_mask]))
+        bulk_I.append(np.mean(client_a[bulk_mask]) * 65536)
+        bulk_I.append(np.mean(client_b[bulk_mask]) * 65536)
 
     return replicate_output, bulk_I
 

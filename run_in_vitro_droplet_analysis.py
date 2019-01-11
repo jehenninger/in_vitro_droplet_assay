@@ -50,23 +50,26 @@ metadata, output_dirs = helper.read_metadata(input_args, metadata_path)  # @Temp
 samples = np.unique(metadata['experiment_name'])
 num_of_samples = len(samples)
 
+replicate_writer = pd.ExcelWriter(os.path.join(output_dirs['output_individual'], 'individual_droplet_output.xlsx'),
+                                  engine='xlsxwriter')
 for s in samples:
     print()
     print("Sample: ", s)
     print()
     metadata_sample = metadata[(metadata['experiment_name'] == s)].copy()
+    metadata_sample = metadata_sample.reset_index(drop=True)
 
     # get number of replicates
     replicates = np.unique(metadata_sample['replicate'])
     num_of_replicates = len(replicates)
 
-    replicate_writer = pd.ExcelWriter(os.path.join(output_dirs['output_individual'], 'individual_droplet_output.xlsx'),
-                                      engine='xlsxwriter')
+
     count = 0
     for r in replicates:
         # print('replicate: ', r)
 
         metadata_replicate = metadata_sample[metadata_sample['replicate'] == r].copy()
+        metadata_replicate = metadata_replicate.reset_index(drop=True)
 
         temp_rep, temp_bulk = helper.analyze_replicate(metadata_replicate, input_args)
 
@@ -76,13 +79,13 @@ for s in samples:
             count = count + 1
         else:
             replicate_output = replicate_output.append(temp_rep)
-            bulk_I = bulk_I.append(temp_bulk)
+            bulk_I = bulk_I + temp_bulk
             count = count + 1
 
-    replicate_output.to_excel(replicate_writer, sheet_name=s)
+    replicate_output.to_excel(replicate_writer, sheet_name=s, index=False)
 
     helper.analyze_sample(metadata_sample, input_args, replicate_output, bulk_I)
 
-
+replicate_writer.save()
 
 # OUTPUT PARAMETERS USED FOR ANALYSIS TO TEXT FILE IN FOLDER
