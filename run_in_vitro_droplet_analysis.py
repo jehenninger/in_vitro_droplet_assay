@@ -31,10 +31,12 @@ parser = argparse.ArgumentParser()
 # parser.add_argument("metadata_path")  # @Temporary
 parser.add_argument("--o", type=str)  # optional output directory name
 parser.add_argument("--tm", type=float, default=3.0)  # optional threshold multiplier. Defaults to 3. Multiplies std plus background peak
-parser.add_argument("--min_a", type=float, default=9.0)  # optional threshold for minimum droplet area
+# parser.add_argument("--min_a", type=float, default=9.0)
+parser.add_argument("--min_a", type=float, default=20)# optional threshold for minimum droplet area
 parser.add_argument("--max_a", type=float, default=500)  # optional threshold for max droplet area
 parser.add_argument("--circ", type=float, default=0.8)  # optional threshold for droplet circularity
-parser.add_argument("--s", default='avg')  # what channel to use for scaffolding. Defaults to average.
+# parser.add_argument("--s", default='avg')  # what channel to use for scaffolding. Defaults to average.
+parser.add_argument("--s", default=561)
 parser.add_argument('--crop', type=int)  # width from center point to include in pixels.
                                          # Defaults to entire image (width/2)
 
@@ -83,6 +85,8 @@ for s in samples:
             count = count + 1
 
     replicate_output.to_excel(replicate_writer, sheet_name=s, index=False)
+    print("Bulk mean: ")
+    print(bulk_I)
 
     helper.analyze_sample(metadata_sample, input_args, replicate_output, bulk_I)
 

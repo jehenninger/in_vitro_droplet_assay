@@ -19,3 +19,19 @@ Identified droplets by intensity thresholds. Regions within 2 µm of the droplet
 max size thresholds for the droplets.
 Intensities from all included regions of droplets or bulk phases were averaged and used to calculate molecule and module
 concentrations in the two phases using an intensity v concentration standard curve.
+
+
+
+TO DO:
+
+Re-evaluate how to do scaffold input. Check everything because I messed around with calling scaffold client_b.
+
+Get total intensity in droplets and outside droplets.
+
+Calculate and output bulk
+
+Output parameters used.
+
+Better terminal output. Maybe add date/time.
+
+Output images with masks.

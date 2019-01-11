@@ -124,6 +124,8 @@ def analyze_replicate(metadata, input_args):
     scaffold = scaffold[crop_mask].reshape(crop_shape)
     if client_image_flag:
         client = client[crop_mask].reshape(crop_shape)
+        client_a = client
+        client_b = scaffold
 
     if avg_image_flag:
         client_a = client_a[crop_mask].reshape(crop_shape)
@@ -138,9 +140,11 @@ def analyze_replicate(metadata, input_args):
 
         if scaffold_image_flag:
             scaffold, scaffold_bg_peak = subtract_background(scaffold)
+            client_b = scaffold
+            client_b_bg_peak = scaffold_bg_peak
 
         if client_image_flag:
-            client, client_bg_peak = subtract_background(client)
+            client_a, client_a_bg_peak = subtract_background(client)
 
         if avg_image_flag:
             scaffold, scaffold_bg_peak = subtract_background(scaffold)
@@ -275,3 +279,7 @@ def analyze_sample(metadata, input_args, replicate_output, bulk_I):
 
     if num_of_channels == 1:
         print('Done')
+    elif num_of_channels == 2:
+        for idx, r in enumerate(replicate_output['replicate']):
+            return
+           # print('JON START HERE')
