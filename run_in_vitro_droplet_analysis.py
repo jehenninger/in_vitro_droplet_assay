@@ -124,6 +124,9 @@ for key, sheet in sample_writer.sheets.items():
 replicate_writer.save()
 sample_writer.save()
 
+# make boxplot with all droplets
+
+
 
 # write parameters that were used for this analysis
 output_params = {'metadata_file'    : input_args.metadata_path,

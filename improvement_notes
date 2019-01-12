@@ -24,18 +24,17 @@ concentrations in the two phases using an intensity v concentration standard cur
 
 TO DO:
 
+START at grapher.py
+
 Add function that only re-makes graphs from already-analyzed output
 
 Better terminal output. Maybe add date/time.
-
-Output images with masks.
 
 Right now, I think I might have 'channels' hardcoded in the output. I may need to change this in case people don't use
 488 and 561, and in that particular order.
 
 Graphs to consider making:
+    Boxplot and dots for all droplets
+    Mean +/- stdev for image averages
     Droplet size/area histogram
     Intensity in one channel vs. the other (to look at heterotypic vs homotypic droplets)
-
-When cropping, it would be ideal to show the droplet labels extrapolatd back to the original image. Currently,
-it only shows the zoomed in cropped part. Alternatively, we could just draw a box on the original image.

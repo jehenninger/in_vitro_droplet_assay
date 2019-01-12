@@ -350,8 +350,7 @@ def analyze_replicate(metadata, input_args, output_dirs):
                                                             'circularity': circularity},
                                                            ignore_index=True)
 
-
-    generate_droplet_image(output_dirs['output_individual_images'], orig_image, scaffold, label_image,
+    make_droplet_image(output_dirs['output_individual_images'], orig_image, scaffold, label_image,
                            num_of_channels, str(s) + '_' + str(r), droplet_id_list, droplet_id_centroid_c, droplet_id_centroid_r,
                            input_args)
 
@@ -475,7 +474,7 @@ def make_axes_blank(ax):
     ax.get_xaxis().set_ticks([])
     ax.get_yaxis().set_ticks([])
 
-def generate_droplet_image(output_path, orig_image, scaffold_image, label_image, num_of_channels, name,
+def make_droplet_image(output_path, orig_image, scaffold_image, label_image, num_of_channels, name,
                            droplet_list, droplet_r, droplet_c, input_args):
     fig, ax = plt.subplots(nrows=1,ncols=2)
     orig_image = exposure.rescale_intensity(orig_image)
