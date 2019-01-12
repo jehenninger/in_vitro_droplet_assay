@@ -28,7 +28,7 @@ from skimage import io, filters, measure, color, exposure, morphology, feature, 
 
 # parse input
 parser = argparse.ArgumentParser()
-# parser.add_argument("metadata_path")  # @Temporary
+parser.add_argument("metadata_path")
 parser.add_argument("--o", type=str)  # optional output directory name
 parser.add_argument("--tm", type=float, default=3.0)  # optional threshold multiplier. Defaults to 3. Multiplies std plus background peak
 parser.add_argument("--r", type=float, default=9.0)  # area of subset circle to use in middle of droplet
@@ -37,6 +37,9 @@ parser.add_argument("--max_a", type=float, default=500)  # optional threshold fo
 parser.add_argument("--circ", type=float, default=0.8)  # optional threshold for droplet circularity
 parser.add_argument("--s", default='avg')  # what channel to use for scaffolding. Defaults to average.
 parser.add_argument("--b", type=float, default=0.0)  # background subtraction
+parser.add_argument("--pr", type=str, default='sub')  # Value to use for [C](in) to calculate partition ratio.
+    # Options: 'sub' for subset circle, 'mean' for mean intensity of whole droplet, 'max' for max intensity in droplet
+
 # parser.add_argument("--s", default=561) # @Temporary
 parser.add_argument('--crop', type=int)  # width from center point to include in pixels.
                                          # Defaults to entire image (width/2)
@@ -47,8 +50,9 @@ parser.add_argument('--crop', type=int)  # width from center point to include in
 input_args = parser.parse_args()
 
 # load and check metadata
-metadata_path = '/Users/jon/PycharmProjects/in_vitro_droplet_assay/test_MED_CTD/metadata.xlsx'
-metadata, output_dirs = helper.read_metadata(input_args, metadata_path)  # @Temporary
+# metadata_path = '/Users/jon/PycharmProjects/in_vitro_droplet_assay/test_MED_CTD/metadata.xlsx'
+# metadata, output_dirs = helper.read_metadata(input_args, metadata_path)  # @Temporary
+metadata, output_dirs = helper.read_metadata(input_args)
 
 # get number of unique experiments
 samples = np.unique(metadata['experiment_name'])
@@ -87,11 +91,13 @@ for s in samples:
             count = count + 1
 
     replicate_output.to_excel(replicate_writer, sheet_name=s, index=False)
-    print("Bulk mean: ")
-    print(bulk_I)
+    # print("Bulk mean: ")
+    # print(bulk_I)
 
     helper.analyze_sample(metadata_sample, input_args, replicate_output, bulk_I)
+    print('Finished at: ', datetime.now())
 
 replicate_writer.save()
+
 
 # OUTPUT PARAMETERS USED FOR ANALYSIS TO TEXT FILE IN FOLDER

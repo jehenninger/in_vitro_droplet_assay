@@ -41,3 +41,10 @@ Output parameters used.
 Better terminal output. Maybe add date/time.
 
 Output images with masks.
+
+Right now, I think I might have 'channels' hardcoded in the output. I may need to change this in case people don't use
+488 and 561, and in that particular order.
+
+Graphs to consider making:
+    Droplet size
+    Intensity in one channel vs. the other (to look at heterotypic vs homotypic droplets)
