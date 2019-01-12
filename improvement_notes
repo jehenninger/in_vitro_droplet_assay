@@ -24,6 +24,12 @@ concentrations in the two phases using an intensity v concentration standard cur
 
 TO DO:
 
+Change background subtraction to a number.
+
+Add optional parameter to choose subset mean, mean, or max to generate graphs
+
+Add function that only re-makes graphs from already-analyzed output
+
 Re-evaluate how to do scaffold input. Check everything because I messed around with calling scaffold client_b.
 
 Get total intensity in droplets and outside droplets.

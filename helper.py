@@ -67,6 +67,11 @@ def analyze_replicate(metadata, input_args):
     client_image_flag = False
     avg_image_flag = False
 
+    bsub_flag = False
+    if input_args.b > 0:
+        background_value_to_subtract = input_args.b
+        bsub_flag = True
+
     if type(input_args.s) is int:
         scaffold_channel_name = input_args.s
         scaffold_test = [b == scaffold_channel_name for b in channels]
@@ -76,12 +81,13 @@ def analyze_replicate(metadata, input_args):
                 scaffold_image_path = metadata['image_path'][idx]
                 scaffold = io.imread(scaffold_image_path)
                 scaffold = img_as_float(scaffold)
+                client_a = scaffold
                 scaffold_image_flag = True
             else:
-                client_image_path = metadata['image_path'][idx]
-                client = io.imread(client_image_path)
-                client = img_as_float(client)
-                client_image_flag = True
+                client_b_image_path = metadata['image_path'][idx]
+                client_b = io.imread(client_b_image_path)
+                client_b = img_as_float(client_b)
+                client_b_image_flag = True
 
     elif type(input_args.s) is str:
         if input_args.s is 'avg':
@@ -96,6 +102,8 @@ def analyze_replicate(metadata, input_args):
                     image_to_add = io.imread(metadata['image_path'][idx])
                     image_to_add = img_as_float(image_to_add)
                     client_b = image_to_add
+
+                    client_b_image_flag = True
 
                     avg_image = avg_image + image_to_add
                     count = count + 1
@@ -122,46 +130,40 @@ def analyze_replicate(metadata, input_args):
         crop_shape = scaffold.shape
 
     scaffold = scaffold[crop_mask].reshape(crop_shape)
-    if client_image_flag:
-        client = client[crop_mask].reshape(crop_shape)
+    client_a = client_a[crop_mask].reshape(crop_shape)
+
+    if client_b_image_flag:
+        client_b = client_b[crop_mask].reshape(crop_shape)
         client_a = client
         client_b = scaffold
 
-    if avg_image_flag:
-        client_a = client_a[crop_mask].reshape(crop_shape)
-        client_b = client_b[crop_mask].reshape(crop_shape)
-
-    # find std of image for later thresholding @Important before background subtraction
-    scaffold_std = np.std(scaffold)
-    threshold_multiplier = input_args.tm
-
     # background subtraction
     if input_args.bsub_flag:
+        scaffold = scaffold - background_value_to_subtract
+        client_a = client_a - background_value_to_subtract
 
-        if scaffold_image_flag:
-            scaffold, scaffold_bg_peak = subtract_background(scaffold)
-            client_b = scaffold
-            client_b_bg_peak = scaffold_bg_peak
+        if client_b_image_flag:
+            client_b = client_b - background_value_to_subtract
 
-        if client_image_flag:
-            client_a, client_a_bg_peak = subtract_background(client)
+    # find std of image for later thresholding
+    scaffold_std = np.std(scaffold)
+    client_a_std = np.std(client_a)
+    client_b_std = np.std(client_b)
 
-        if avg_image_flag:
-            scaffold, scaffold_bg_peak = subtract_background(scaffold)
-            client_a, client_a_bg_peak = subtract_background(client_a)
-            client_b_bsub, client_b_bg_peak = subtract_background(client_b)
+    threshold_multiplier = input_args.tm
 
     # make binary image of scaffold with threshold intensity. Threshold is multiplier of std above background
-    # @Important only add to background peak if we haven't subtracted background
+
+    scaffold_mean = np.mean(scaffold)
+    client_a_mean = np.mean(client_a)
+    if client_b_image_flag:
+        client_b_mean = np.mean(client_b)
+
     binary_mask = np.full(shape=(scaffold.shape[0], scaffold.shape[1]), fill_value=False, dtype=bool)
     scaffold_binary = np.full(shape=(scaffold.shape[0], scaffold.shape[1]), fill_value= False, dtype=bool)
 
-    if input_args.bsub_flag:
-        binary_mask[scaffold > (threshold_multiplier * scaffold_std)] = True
-        scaffold_binary[binary_mask] = True
-    else:
-        binary_mask[scaffold > (scaffold_bg_peak + (threshold_multiplier * scaffold_std))] = True
-        scaffold_binary[binary_mask] = True
+    binary_mask[scaffold > (scaffold_mean + (threshold_multiplier * scaffold_std))] = True
+    scaffold_binary[binary_mask] = True
 
     scaffold_binary = ndi.morphology.binary_fill_holes(scaffold_binary)
     scaffold_binary_labeled = measure.label(scaffold_binary)
@@ -171,6 +173,11 @@ def analyze_replicate(metadata, input_args):
     min_area_threshold = input_args.min_a
     max_area_threshold = input_args.max_a
     circ_threshold = input_args.circ
+    subset_area = input_args.r
+
+    subset_area_less_than_min_area_flag = False
+    if subset_area < min_area_threshold:
+        subset_area_less_than_min_area_flag = True
 
     scaffold_mask = np.full(shape=(scaffold.shape[0], scaffold.shape[1]), fill_value=False, dtype=bool)
     for i, region in enumerate(scaffold_regionprops):
@@ -201,13 +208,24 @@ def analyze_replicate(metadata, input_args):
         r = replicate_name
         droplet_id = i
         area = region.area
+
+        use_min_area_flag = False
+        if subset_area_less_than_min_area_flag:
+            if area < subset_area:
+                use_min_area_flag = True
+
         centroid_r, centroid_c = region.centroid
         circularity = circ(region)
         coordinates = region.coords
         coords_r = coordinates[:, 0]
         coords_c = coordinates[:, 1]
-        subset_coords_r, subset_coords_c = draw.circle(r=centroid_r, c=centroid_c,
-                                                       radius=round(math.sqrt(min_area_threshold)))
+
+        if use_min_area_flag:
+            subset_coords_r = coords_r
+            subset_coords_c = coords_c
+        else:
+            subset_coords_r, subset_coords_c = draw.circle(r=centroid_r, c=centroid_c,
+                                                           radius=round(math.sqrt(subset_area)))
 
         # in cases where droplets are near the edge, the circle will go beyond the image. In that case,
         # we simply ignore the droplet
@@ -218,7 +236,7 @@ def analyze_replicate(metadata, input_args):
             if num_of_channels == 1:
                 mean_intensity = region.mean_intensity * 65536
                 max_intensity = region.max_intensity * 65536
-                subset_intensity = np.mean(scaffold[subset_coords_c, subset_coords_r]) * 65536
+                subset_intensity = np.mean(client_a[subset_coords_c, subset_coords_r]) * 65536
 
                 replicate_output = replicate_output.append({'sample': s, 'replicate': r,
                                                             'droplet_id': droplet_id,

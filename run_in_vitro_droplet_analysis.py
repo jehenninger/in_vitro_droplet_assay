@@ -31,16 +31,18 @@ parser = argparse.ArgumentParser()
 # parser.add_argument("metadata_path")  # @Temporary
 parser.add_argument("--o", type=str)  # optional output directory name
 parser.add_argument("--tm", type=float, default=3.0)  # optional threshold multiplier. Defaults to 3. Multiplies std plus background peak
-# parser.add_argument("--min_a", type=float, default=9.0)
-parser.add_argument("--min_a", type=float, default=20)# optional threshold for minimum droplet area
+parser.add_argument("--r", type=float, default=9.0)  # area of subset circle to use in middle of droplet
+parser.add_argument("--min_a", type=float, default=9)  # optional threshold for minimum droplet area @Temporary
 parser.add_argument("--max_a", type=float, default=500)  # optional threshold for max droplet area
 parser.add_argument("--circ", type=float, default=0.8)  # optional threshold for droplet circularity
-# parser.add_argument("--s", default='avg')  # what channel to use for scaffolding. Defaults to average.
-parser.add_argument("--s", default=561)
+parser.add_argument("--s", default='avg')  # what channel to use for scaffolding. Defaults to average.
+parser.add_argument("--b", type=float, default=0.0)  # background subtraction
+# parser.add_argument("--s", default=561) # @Temporary
 parser.add_argument('--crop', type=int)  # width from center point to include in pixels.
                                          # Defaults to entire image (width/2)
 
-parser.add_argument('--no-bsub', dest='bsub_flag', action='store_false', default=True)
+# parser.add_argument('--no-bsub', dest='bsub_flag', action='store_false', default=True)  # @Deprecated
+
 
 input_args = parser.parse_args()
 
