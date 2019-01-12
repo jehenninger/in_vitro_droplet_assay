@@ -36,3 +36,6 @@ Right now, I think I might have 'channels' hardcoded in the output. I may need t
 Graphs to consider making:
     Droplet size/area histogram
     Intensity in one channel vs. the other (to look at heterotypic vs homotypic droplets)
+
+When cropping, it would be ideal to show the droplet labels extrapolatd back to the original image. Currently,
+it only shows the zoomed in cropped part. Alternatively, we could just draw a box on the original image.

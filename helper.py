@@ -9,6 +9,7 @@ import matplotlib
 # matplotlib.use('Qt5Agg')
 matplotlib.use('Agg')
 from matplotlib import pyplot as plt
+from matplotlib import patches
 import argparse
 import json
 from datetime import datetime
@@ -141,10 +142,10 @@ def analyze_replicate(metadata, input_args, output_dirs):
     crop_mask = np.full(shape=(scaffold.shape[0], scaffold.shape[1]), fill_value=False, dtype=bool)
 
     if input_args.crop:
-        c_width = input_args.crop
-        center_coord = scaffold.shape[0]/2
-        crop_mask[range(center_coord-c_width, center_coord+c_width), range(center_coord-c_width, center_coord+c_width)] = True
-        crop_shape = (2*c_width, 2*c_width)
+        c_width = int(input_args.crop)
+        center_coord = int(scaffold.shape[0]/2)
+        crop_mask[center_coord-c_width:center_coord+c_width, center_coord-c_width:center_coord+c_width] = True
+        crop_shape = (int(2*c_width), int(2*c_width))
     else:
         crop_mask.fill(True)
         crop_shape = scaffold.shape
@@ -241,12 +242,14 @@ def analyze_replicate(metadata, input_args, output_dirs):
 
     # initialize labeled image to generate output of what droplets were called
     label_image = np.full(shape=(scaffold.shape[0], scaffold.shape[1]), fill_value=False, dtype=bool)
+    droplet_id_list = []
+    droplet_id_centroid_r = []
+    droplet_id_centroid_c = []
 
     # iterate over regions to collect information on individual droplets
     for i, region in enumerate(scaffold_filtered_regionprops):
         s = sample_name
         r = replicate_name
-        droplet_id = i
         area = region.area
 
         use_min_area_flag = False
@@ -274,6 +277,10 @@ def analyze_replicate(metadata, input_args, output_dirs):
 
         if edge_r_test and edge_c_test:
             label_image[coords_r, coords_c] = True
+            droplet_id = i
+            droplet_id_list.append(droplet_id)
+            droplet_id_centroid_r.append(centroid_r)
+            droplet_id_centroid_c.append(centroid_c)
 
             if num_of_channels == 1:
                 mean_intensity = region.mean_intensity * 65536
@@ -345,7 +352,8 @@ def analyze_replicate(metadata, input_args, output_dirs):
 
 
     generate_droplet_image(output_dirs['output_individual_images'], orig_image, scaffold, label_image,
-                           num_of_channels, str(s) + '_' + str(r))
+                           num_of_channels, str(s) + '_' + str(r), droplet_id_list, droplet_id_centroid_c, droplet_id_centroid_r,
+                           input_args)
 
     return replicate_output, bulk_I, total_I
 
@@ -463,18 +471,51 @@ def find_region_edge_pixels(a):  # this is a way to maybe find boundary pixels i
     distance[distance != 1] = 0
     np.where(distance == 1)
 
+def make_axes_blank(ax):
+    ax.get_xaxis().set_ticks([])
+    ax.get_yaxis().set_ticks([])
 
-def generate_droplet_image(output_path, orig_image, scaffold_image, label_image, num_of_channels, name):
+def generate_droplet_image(output_path, orig_image, scaffold_image, label_image, num_of_channels, name,
+                           droplet_list, droplet_r, droplet_c, input_args):
     fig, ax = plt.subplots(nrows=1,ncols=2)
     orig_image = exposure.rescale_intensity(orig_image)
+    scaffold_image = exposure.rescale_intensity(scaffold_image)
+
+    label = np.zeros(shape=label_image.shape)
+    label[label_image] = 1
+
+    # label_image[label_image is True] = 1
 
     if num_of_channels == 1:
         ax[0].imshow(orig_image, cmap='gray')
     elif num_of_channels == 2:
         ax[0].imshow(orig_image)
 
-    ax[0].set_title(name)
-    ax[0].get_xaxis().set_ticks([])
-    ax[0].get_yaxis().set_ticks([])
+    if input_args.crop:
+        crop_x_left = int(orig_image.shape[0]/2) - int(input_args.crop)
+        crop_y_bottom = crop_x_left
+        crop_width = 2*input_args.crop
 
-    plt.savefig(os.path.join(output_path, name + '.png'))
+        crop_region = patches.Rectangle(xy=(crop_x_left, crop_y_bottom), width=crop_width, height=crop_width,
+                                        fill=False, color='y', linewidth=2.0)
+        ax[0].add_patch(crop_region)
+
+    ax[0].set_title(name)
+    make_axes_blank(ax[0])
+
+    region_overlay = color.label2rgb(label, image=scaffold_image,
+                                     alpha=0.5, image_alpha=1, bg_label=0, bg_color=None)
+
+    ax[1].imshow(region_overlay)
+
+    text_offset = 10
+    droplet_r = [(int(round(r)) + text_offset) for r in droplet_r]
+    droplet_c = [(int(round(c)) + text_offset) for c in droplet_c]
+
+    for i, drop_id in enumerate(droplet_list):
+        ax[1].text(droplet_r[i], droplet_c[i], drop_id, color='w', fontsize=4)
+
+
+    make_axes_blank(ax[1])
+
+    plt.savefig(os.path.join(output_path, name + '.png'), dpi=300)
