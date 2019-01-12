@@ -24,11 +24,7 @@ concentrations in the two phases using an intensity v concentration standard cur
 
 TO DO:
 
-Auto-size Excel columns
-
 Add function that only re-makes graphs from already-analyzed output
-
-Output parameters used.
 
 Better terminal output. Maybe add date/time.
 

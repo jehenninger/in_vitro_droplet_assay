@@ -36,7 +36,8 @@ def read_metadata(input_args):
 
     output_dirs = {'output_parent': output_parent_dir,
                    'output_individual': os.path.join(output_parent_dir, 'individual'),
-                   'output_summary': os.path.join(output_parent_dir, 'summary')}
+                   'output_summary': os.path.join(output_parent_dir, 'summary'),
+                   'output_individual_images': os.path.join(output_parent_dir,'individual','droplet_images')}
 
     # make folders if they don't exist
     if not os.path.isdir(output_parent_dir):
@@ -53,7 +54,7 @@ def read_metadata(input_args):
     return metadata, output_dirs
 
 
-def analyze_replicate(metadata, input_args):
+def analyze_replicate(metadata, input_args, output_dirs):
     sample_name = np.unique(metadata['experiment_name'])[0]
     replicate_name = np.unique(metadata['replicate'])[0]
     channels = np.unique(metadata['channel_id'])
@@ -124,6 +125,17 @@ def analyze_replicate(metadata, input_args):
     else:
         print('ERROR: Could not identify scaffold parameter for replicate ', metadata['replicate'][0], ' in sample ', metadata['experiment_name'][0])
         sys.exit(0)
+
+    # make merged original image before processing
+
+    if num_of_channels == 1:
+        orig_image = client_a
+    elif num_of_channels == 2:
+        orig_image = np.zeros(shape=(scaffold.shape[0], scaffold.shape[0], 3))
+        # we will assume that first channel is green and second channel is magenta
+        orig_image[..., 0] = client_b  # R
+        orig_image[..., 1] = client_a  # G
+        orig_image[..., 2] = client_b  # B
 
     #  define crop region
     crop_mask = np.full(shape=(scaffold.shape[0], scaffold.shape[1]), fill_value=False, dtype=bool)
@@ -227,6 +239,9 @@ def analyze_replicate(metadata, input_args):
         total_I.append(np.sum(client_a) * 65536)
         total_I.append(np.sum(client_b) * 65536)
 
+    # initialize labeled image to generate output of what droplets were called
+    label_image = np.full(shape=(scaffold.shape[0], scaffold.shape[1]), fill_value=False, dtype=bool)
+
     # iterate over regions to collect information on individual droplets
     for i, region in enumerate(scaffold_filtered_regionprops):
         s = sample_name
@@ -258,6 +273,8 @@ def analyze_replicate(metadata, input_args):
         edge_c_test = all(0 < c < scaffold.shape[1] for c in subset_coords_c)
 
         if edge_r_test and edge_c_test:
+            label_image[coords_r, coords_c] = True
+
             if num_of_channels == 1:
                 mean_intensity = region.mean_intensity * 65536
                 max_intensity = region.max_intensity * 65536
@@ -327,6 +344,8 @@ def analyze_replicate(metadata, input_args):
                                                            ignore_index=True)
 
 
+    generate_droplet_image(output_dirs['output_individual_images'], orig_image, scaffold, label_image,
+                           num_of_channels, str(s) + '_' + str(r))
 
     return replicate_output, bulk_I, total_I
 
@@ -437,3 +456,25 @@ def analyze_sample(metadata, input_args, replicate_output, bulk_I, total_I):
                                               'condensed_fraction_std_' +  str(channels[1]): sample_client_b_condensed_fraction_std
                                               }, ignore_index=True)
     return sample_output
+
+
+def find_region_edge_pixels(a):  # this is a way to maybe find boundary pixels if we ever need to do that
+    distance = ndi.distance_transform_edt(a)
+    distance[distance != 1] = 0
+    np.where(distance == 1)
+
+
+def generate_droplet_image(output_path, orig_image, scaffold_image, label_image, num_of_channels, name):
+    fig, ax = plt.subplots(nrows=1,ncols=2)
+    orig_image = exposure.rescale_intensity(orig_image)
+
+    if num_of_channels == 1:
+        ax[0].imshow(orig_image, cmap='gray')
+    elif num_of_channels == 2:
+        ax[0].imshow(orig_image)
+
+    ax[0].set_title(name)
+    ax[0].get_xaxis().set_ticks([])
+    ax[0].get_yaxis().set_ticks([])
+
+    plt.savefig(os.path.join(output_path, name + '.png'))

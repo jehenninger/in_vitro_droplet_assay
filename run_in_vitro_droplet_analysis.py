@@ -81,7 +81,7 @@ for s in samples:
         metadata_replicate = metadata_sample[metadata_sample['replicate'] == r].copy()
         metadata_replicate = metadata_replicate.reset_index(drop=True)
 
-        temp_rep, temp_bulk, temp_total = helper.analyze_replicate(metadata_replicate, input_args)
+        temp_rep, temp_bulk, temp_total = helper.analyze_replicate(metadata_replicate, input_args, output_dirs)
 
         if count == 0:
             replicate_output = temp_rep.copy()
@@ -125,17 +125,18 @@ replicate_writer.save()
 sample_writer.save()
 
 
-# OUTPUT PARAMETERS USED FOR ANALYSIS TO TEXT FILE IN FOLDER
+# write parameters that were used for this analysis
+output_params = {'metadata_file'    : input_args.metadata_path,
+                 'time_of_analysis' : datetime.now(),
+                 'tm'               : input_args.tm,
+                 'r'                : input_args.r,
+                 'min_a'            : input_args.min_a,
+                 'max_a'            : input_args.max_a,
+                 'circ'             : input_args.circ,
+                 's'                : input_args.s,
+                 'b'                : input_args.b,
+                 'pr'               : input_args.pr,
+                 'crop'             : input_args.crop}
 
-#writer = pd.ExcelWriter(filename, engine='xlsxwriter')
-#for sheetname, df in dfs.items():  # loop through `dict` of dataframes
-#    df.to_excel(writer, sheet_name=sheetname)  # send df to writer
-#    worksheet = writer.sheets[sheetname]  # pull worksheet object
-#     for idx, col in enumerate(df):  # loop through all columns
-#         series = df[col]
-#         max_len = max((
-#             series.astype(str).map(len).max(),  # len of largest item
-#             len(str(series.name))  # len of column name/header
-#             )) + 1  # adding a little extra space
-#         worksheet.set_column(idx, idx, max_len)  # set column width
-# writer.save()
+with open(os.path.join(output_dirs['output_parent'], 'output_analysis_parameters.txt'), 'w') as file:
+        file.write(json.dumps(output_params, default=str))
