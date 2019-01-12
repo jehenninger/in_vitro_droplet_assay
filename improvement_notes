@@ -24,17 +24,9 @@ concentrations in the two phases using an intensity v concentration standard cur
 
 TO DO:
 
-Change background subtraction to a number.
-
-Add optional parameter to choose subset mean, mean, or max to generate graphs
+Auto-size Excel columns
 
 Add function that only re-makes graphs from already-analyzed output
-
-Re-evaluate how to do scaffold input. Check everything because I messed around with calling scaffold client_b.
-
-Get total intensity in droplets and outside droplets.
-
-Calculate and output bulk
 
 Output parameters used.
 
@@ -46,5 +38,5 @@ Right now, I think I might have 'channels' hardcoded in the output. I may need t
 488 and 561, and in that particular order.
 
 Graphs to consider making:
-    Droplet size
+    Droplet size/area histogram
     Intensity in one channel vs. the other (to look at heterotypic vs homotypic droplets)

@@ -60,17 +60,19 @@ num_of_samples = len(samples)
 
 replicate_writer = pd.ExcelWriter(os.path.join(output_dirs['output_individual'], 'individual_droplet_output.xlsx'),
                                   engine='xlsxwriter')
+
+sample_writer = pd.ExcelWriter(os.path.join(output_dirs['output_summary'], 'summary_droplet_output.xlsx'),
+                                  engine='xlsxwriter')
+sample_count = 0
 for s in samples:
     print()
     print("Sample: ", s)
-    print()
     metadata_sample = metadata[(metadata['experiment_name'] == s)].copy()
     metadata_sample = metadata_sample.reset_index(drop=True)
 
     # get number of replicates
     replicates = np.unique(metadata_sample['replicate'])
     num_of_replicates = len(replicates)
-
 
     count = 0
     for r in replicates:
@@ -79,25 +81,61 @@ for s in samples:
         metadata_replicate = metadata_sample[metadata_sample['replicate'] == r].copy()
         metadata_replicate = metadata_replicate.reset_index(drop=True)
 
-        temp_rep, temp_bulk = helper.analyze_replicate(metadata_replicate, input_args)
+        temp_rep, temp_bulk, temp_total = helper.analyze_replicate(metadata_replicate, input_args)
 
         if count == 0:
-            replicate_output = temp_rep
+            replicate_output = temp_rep.copy()
             bulk_I = temp_bulk
+            total_I = temp_total
             count = count + 1
         else:
-            replicate_output = replicate_output.append(temp_rep)
+            replicate_output = replicate_output.append(temp_rep, ignore_index=True)
             bulk_I = bulk_I + temp_bulk
+            total_I = total_I + temp_total
             count = count + 1
 
     replicate_output.to_excel(replicate_writer, sheet_name=s, index=False)
-    # print("Bulk mean: ")
-    # print(bulk_I)
 
-    helper.analyze_sample(metadata_sample, input_args, replicate_output, bulk_I)
+    temp_sample_output = helper.analyze_sample(metadata_sample, input_args, replicate_output, bulk_I, total_I)
+
+    if sample_count == 0:
+        sample_output = temp_sample_output.copy()
+        sample_count = sample_count + 1
+    else:
+        sample_output = sample_output.append(temp_sample_output, ignore_index=True)
+        sample_count = sample_count + 1
+
     print('Finished at: ', datetime.now())
 
+
+sample_output.to_excel(sample_writer, sheet_name='summary', index=False)
+
+# adjust width of Excel columns in output to make for easier reading before writing the file
+for key, sheet in replicate_writer.sheets.items():
+    for idx, name in enumerate(replicate_output.columns):
+        col_width = len(name) + 2
+        sheet.set_column(idx, idx, col_width)
+
+for key, sheet in sample_writer.sheets.items():
+    for idx, name in enumerate(sample_output.columns):
+        col_width = len(name) + 2
+        sheet.set_column(idx, idx, col_width)
+
 replicate_writer.save()
+sample_writer.save()
 
 
 # OUTPUT PARAMETERS USED FOR ANALYSIS TO TEXT FILE IN FOLDER
+
+#writer = pd.ExcelWriter(filename, engine='xlsxwriter')
+#for sheetname, df in dfs.items():  # loop through `dict` of dataframes
+#    df.to_excel(writer, sheet_name=sheetname)  # send df to writer
+#    worksheet = writer.sheets[sheetname]  # pull worksheet object
+#     for idx, col in enumerate(df):  # loop through all columns
+#         series = df[col]
+#         max_len = max((
+#             series.astype(str).map(len).max(),  # len of largest item
+#             len(str(series.name))  # len of column name/header
+#             )) + 1  # adding a little extra space
+#         worksheet.set_column(idx, idx, max_len)  # set column width
+# writer.save()
