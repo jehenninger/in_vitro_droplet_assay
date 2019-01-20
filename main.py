@@ -46,7 +46,7 @@ parser.add_argument('--crop', type=int)  # width from center point to include in
                                          # Defaults to entire image (width/2)
 
 parser.add_argument('--no-image', dest='output_image_flag', action='store_false', default=True)  # flag to set whether output images of the droplets are saved to a directory
-
+parser.add_argument('--rand-bulk', dest='randomize_bulk_flag', action='store_true', default=False)  # flag to calculate bulk by randomzing the image 100 times and taking the average intensity
 # parser.add_argument('--no-bsub', dest='bsub_flag', action='store_false', default=True)  # @Deprecated
 
 
@@ -140,6 +140,7 @@ sample_writer.save()
 
 # make boxplot with all droplets
 grapher.make_droplet_boxplot(graph_input, output_dirs, input_args)
+grapher.make_average_sample_graph(sample_output, output_dirs, input_args)
 print()
 print('Finished making plots at: ', datetime.now())
 

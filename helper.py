@@ -228,17 +228,78 @@ def analyze_replicate(metadata, input_args, output_dirs):
                                                  'area', 'centroid_r', 'centroid_c', 'circularity'])
 
     # get measurements of bulk regions excluding droplets and total intensity of entire image (including droplets)
-    bulk_mask = np.invert(scaffold_mask)
-    bulk_I = []
-    total_I = []
-    if num_of_channels == 1:
-        bulk_I.append(np.mean(scaffold[bulk_mask]) * 65536)
-        total_I.append(np.sum(scaffold)) * 65536
-    elif num_of_channels == 2:
-        bulk_I.append(np.mean(client_a[bulk_mask]) * 65536)
-        bulk_I.append(np.mean(client_b[bulk_mask]) * 65536)
-        total_I.append(np.sum(client_a) * 65536)
-        total_I.append(np.sum(client_b) * 65536)
+    if input_args.randomize_bulk_flag:
+        num_of_iterations = 100
+
+        total_I = []
+
+        if num_of_channels == 1:
+            rand_scaffold_storage = np.zeros(shape=(scaffold.shape[0] * scaffold.shape[1], num_of_iterations))
+
+            scaffold_1d = np.reshape(scaffold, (scaffold.shape[0] * scaffold.shape[1]))
+
+            for n in range(num_of_iterations):
+                rand_scaffold_storage[:,n] = np.random.shuffle(scaffold_1d)
+
+            scaffold_random_average_image = np.reshape(np.mean(rand_scaffold_storage, axis=1), shape=scaffold.shape)
+
+            bulk_I = []
+            bulk_I.append(np.mean(scaffold_random_average_image) * 65536)
+            total_I.append(np.sum(scaffold)) * 65536
+
+        elif num_of_channels == 2:
+            rand_client_a_storage = np.zeros(shape=(client_a.shape[0] * client_a.shape[1], num_of_iterations))
+            rand_client_b_storage = np.zeros(shape=(client_b.shape[0] * client_b.shape[1], num_of_iterations))
+
+            # doc on shuffle: multi-dimensional arrays are only shuffled along the first axis
+            # so let's make the image an array of (N) instead of (m,n)
+            client_a_1d = np.reshape(client_a, (client_a.shape[0] * client_a.shape[1]))
+            client_b_1d = np.reshape(client_b, (client_b.shape[0] * client_b.shape[1]))
+
+            rand_client_a_sum = np.zeros(shape=(1, client_a.shape[0] * client_a.shape[1]))
+            rand_client_b_sum = np.zeros(shape=(1, client_b.shape[0] * client_b.shape[1]))
+            for n in range(num_of_iterations):
+                # rand_client_a_storage[n,:] = np.random.shuffle(client_a_1d)
+                # rand_client_b_storage[n,:] = np.random.shuffle(client_b_1d)
+                np.random.shuffle(client_a_1d)
+                np.random.shuffle(client_b_1d)
+                rand_client_a_sum = rand_client_a_sum + client_a_1d
+                rand_client_b_sum = rand_client_b_sum + client_b_1d
+
+            # client_a_random_average_image = np.reshape(np.mean(rand_client_a_storage, axis=1), client_a.shape)
+            client_a_random_average_image = np.reshape(rand_client_a_sum/num_of_iterations, client_a.shape)
+            client_b_random_average_image = np.reshape(rand_client_b_sum/num_of_iterations, client_b.shape)
+
+            # client_b_random_average_image = np.reshape(np.mean(rand_client_b_storage, axis=1), client_b.shape)
+
+            bulk_I = []
+            bulk_I.append(np.mean(client_a_random_average_image) * 65536)
+            bulk_I.append(np.mean(client_b_random_average_image) * 65536)
+
+            total_I.append(np.sum(client_a) * 65536)
+            total_I.append(np.sum(client_b) * 65536)
+
+        if num_of_channels == 1:
+            random_bulk_image = client_a_random_average_image
+        elif num_of_channels == 2:
+            random_bulk_image = np.zeros(shape=(scaffold.shape[0], scaffold.shape[0], 3))
+            # we will assume that first channel is green and second channel is magenta
+            random_bulk_image[..., 0] = client_b_random_average_image  # R
+            random_bulk_image[..., 1] = client_a_random_average_image  # G
+            random_bulk_image[..., 2] = client_b_random_average_image  # B
+
+    else:
+        bulk_mask = np.invert(scaffold_mask)
+        bulk_I = []
+        total_I = []
+        if num_of_channels == 1:
+            bulk_I.append(np.mean(scaffold[bulk_mask]) * 65536)
+            total_I.append(np.sum(scaffold)) * 65536
+        elif num_of_channels == 2:
+            bulk_I.append(np.mean(client_a[bulk_mask]) * 65536)
+            bulk_I.append(np.mean(client_b[bulk_mask]) * 65536)
+            total_I.append(np.sum(client_a) * 65536)
+            total_I.append(np.sum(client_b) * 65536)
 
     # initialize labeled image to generate output of what droplets were called
     label_image = np.full(shape=(scaffold.shape[0], scaffold.shape[1]), fill_value=False, dtype=bool)
@@ -351,9 +412,15 @@ def analyze_replicate(metadata, input_args, output_dirs):
                                                            ignore_index=True)
 
     if input_args.output_image_flag:
-        make_droplet_image(output_dirs['output_individual_images'], orig_image, scaffold, label_image,
-                           num_of_channels, str(s) + '_' + str(r), droplet_id_list, droplet_id_centroid_c, droplet_id_centroid_r,
-                           input_args)
+        if input_args.randomize_bulk_flag:
+            make_droplet_image(output_dirs['output_individual_images'], orig_image, scaffold, label_image,
+                               num_of_channels, str(s) + '_' + str(r), droplet_id_list, droplet_id_centroid_c, droplet_id_centroid_r,
+                               input_args, random_bulk_image=random_bulk_image)
+        else:
+            make_droplet_image(output_dirs['output_individual_images'], orig_image, scaffold, label_image,
+                               num_of_channels, str(s) + '_' + str(r), droplet_id_list, droplet_id_centroid_c,
+                               droplet_id_centroid_r,
+                               input_args)
 
     return replicate_output, bulk_I, total_I
 
@@ -421,6 +488,7 @@ def analyze_sample(metadata, input_args, replicate_output, bulk_I, total_I):
                                               ignore_index=True)
 
     elif num_of_channels == 2:
+        count = 0
         for idx, r in enumerate(replicates):
             # client_a
             mean_partition_ratio = np.mean(
@@ -428,7 +496,7 @@ def analyze_sample(metadata, input_args, replicate_output, bulk_I, total_I):
             replicate_partition_ratio.append(mean_partition_ratio)
 
             condensed_fraction = np.sum(
-                replicate_output['total_I_' + str(channels[0])][replicate_output['replicate'] == r]) / total_I[idx]
+                replicate_output['total_I_' + str(channels[0])][replicate_output['replicate'] == r]) / total_I[count]
             replicate_condensed_fraction.append(condensed_fraction)
 
             # client_b
@@ -437,8 +505,10 @@ def analyze_sample(metadata, input_args, replicate_output, bulk_I, total_I):
             replicate_partition_ratio.append(mean_partition_ratio)
 
             condensed_fraction = np.sum(
-                replicate_output['total_I_' + str(channels[1])][replicate_output['replicate'] == r]) / total_I[idx]
+                replicate_output['total_I_' + str(channels[1])][replicate_output['replicate'] == r]) / total_I[count+1]  #@Bug Should this be +1? I think so, but need to check.
             replicate_condensed_fraction.append(condensed_fraction)
+
+            count = count + 2  # 2 here because we append both total_I's to the same list
 
         sample_client_a_partition_ratio_mean = np.mean(replicate_partition_ratio[::2])  # every other since we append both clients
         sample_client_a_partition_ratio_std = np.std(replicate_partition_ratio[::2])
@@ -447,7 +517,7 @@ def analyze_sample(metadata, input_args, replicate_output, bulk_I, total_I):
         sample_client_a_condensed_fraction_std = np.std(replicate_condensed_fraction[::2])
 
         sample_client_b_partition_ratio_mean = np.mean(
-            replicate_partition_ratio[::2])  # every other since we append both clients
+            replicate_partition_ratio[1::2])  # every other since we append both clients
         sample_client_b_partition_ratio_std = np.std(replicate_partition_ratio[1::2])
 
         sample_client_b_condensed_fraction_mean = np.mean(replicate_condensed_fraction[1::2])
@@ -478,7 +548,7 @@ def make_axes_blank(ax):
 
 
 def make_droplet_image(output_path, orig_image, scaffold_image, label_image, num_of_channels, name,
-                       droplet_list, droplet_r, droplet_c, input_args):
+                       droplet_list, droplet_r, droplet_c, input_args, random_bulk_image=None):
 
     fig, ax = plt.subplots(nrows=1, ncols=2)
     orig_image = exposure.rescale_intensity(orig_image)
@@ -522,3 +592,23 @@ def make_droplet_image(output_path, orig_image, scaffold_image, label_image, num
 
     plt.savefig(os.path.join(output_path, name + '.png'), dpi=300)
     plt.close()
+
+    if random_bulk_image is not None:
+        fig, ax = plt.subplots(nrows=1, ncols=2)
+        orig_image = exposure.rescale_intensity(orig_image)
+        random_bulk_image = exposure.rescale_intensity(random_bulk_image)
+
+        if num_of_channels == 1:
+            ax[0].imshow(orig_image, cmap='gray')
+            ax[1].imshow(random_bulk_image, cmap='gray')
+        elif num_of_channels == 2:
+            ax[0].imshow(orig_image)
+            ax[1].imshow(random_bulk_image)
+
+        ax[0].set_title(name)
+        ax[1].set_title('Randomized bulk image')
+        make_axes_blank(ax[0])
+        make_axes_blank(ax[1])
+
+        plt.savefig(os.path.join(output_path, name + '_randomized_bulk.png'))
+        plt.close()
