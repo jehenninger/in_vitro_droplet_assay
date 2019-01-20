@@ -26,6 +26,8 @@ TO DO:
 
 START at grapher.py
 
+Try calculating a different [bulk] by randomizing and averaging over many images.
+
 Add function that only re-makes graphs from already-analyzed output
 
 Better terminal output. Maybe add date/time.
@@ -34,7 +36,5 @@ Right now, I think I might have 'channels' hardcoded in the output. I may need t
 488 and 561, and in that particular order.
 
 Graphs to consider making:
-    Boxplot and dots for all droplets
     Mean +/- stdev for image averages
-    Droplet size/area histogram
     Intensity in one channel vs. the other (to look at heterotypic vs homotypic droplets)

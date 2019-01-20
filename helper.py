@@ -252,7 +252,7 @@ def analyze_replicate(metadata, input_args, output_dirs):
         r = replicate_name
         area = region.area
 
-        use_min_area_flag = False
+        use_min_area_flag = False  # this is if the subset area is less than the min droplet area parameter. In this case, we just use the min area.
         if subset_area_less_than_min_area_flag:
             if area < subset_area:
                 use_min_area_flag = True
@@ -350,7 +350,8 @@ def analyze_replicate(metadata, input_args, output_dirs):
                                                             'circularity': circularity},
                                                            ignore_index=True)
 
-    make_droplet_image(output_dirs['output_individual_images'], orig_image, scaffold, label_image,
+    if input_args.output_image_flag:
+        make_droplet_image(output_dirs['output_individual_images'], orig_image, scaffold, label_image,
                            num_of_channels, str(s) + '_' + str(r), droplet_id_list, droplet_id_centroid_c, droplet_id_centroid_r,
                            input_args)
 
@@ -470,13 +471,16 @@ def find_region_edge_pixels(a):  # this is a way to maybe find boundary pixels i
     distance[distance != 1] = 0
     np.where(distance == 1)
 
+
 def make_axes_blank(ax):
     ax.get_xaxis().set_ticks([])
     ax.get_yaxis().set_ticks([])
 
+
 def make_droplet_image(output_path, orig_image, scaffold_image, label_image, num_of_channels, name,
-                           droplet_list, droplet_r, droplet_c, input_args):
-    fig, ax = plt.subplots(nrows=1,ncols=2)
+                       droplet_list, droplet_r, droplet_c, input_args):
+
+    fig, ax = plt.subplots(nrows=1, ncols=2)
     orig_image = exposure.rescale_intensity(orig_image)
     scaffold_image = exposure.rescale_intensity(scaffold_image)
 
@@ -514,7 +518,7 @@ def make_droplet_image(output_path, orig_image, scaffold_image, label_image, num
     for i, drop_id in enumerate(droplet_list):
         ax[1].text(droplet_r[i], droplet_c[i], drop_id, color='w', fontsize=4)
 
-
     make_axes_blank(ax[1])
 
     plt.savefig(os.path.join(output_path, name + '.png'), dpi=300)
+    plt.close()

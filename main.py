@@ -1,4 +1,5 @@
 import helper
+import grapher
 import pandas as pd
 import numpy as np
 import os
@@ -44,6 +45,8 @@ parser.add_argument("--pr", type=str, default='sub')  # Value to use for [C](in)
 parser.add_argument('--crop', type=int)  # width from center point to include in pixels.
                                          # Defaults to entire image (width/2)
 
+parser.add_argument('--no-image', dest='output_image_flag', action='store_false', default=True)  # flag to set whether output images of the droplets are saved to a directory
+
 # parser.add_argument('--no-bsub', dest='bsub_flag', action='store_false', default=True)  # @Deprecated
 
 
@@ -58,11 +61,17 @@ metadata, output_dirs = helper.read_metadata(input_args)
 samples = np.unique(metadata['experiment_name'])
 num_of_samples = len(samples)
 
+channels = np.unique(metadata['channel_id'])
+num_of_channels = len(channels)
+
 replicate_writer = pd.ExcelWriter(os.path.join(output_dirs['output_individual'], 'individual_droplet_output.xlsx'),
                                   engine='xlsxwriter')
 
 sample_writer = pd.ExcelWriter(os.path.join(output_dirs['output_summary'], 'summary_droplet_output.xlsx'),
                                   engine='xlsxwriter')
+
+graph_input = list()
+
 sample_count = 0
 for s in samples:
     print()
@@ -95,6 +104,11 @@ for s in samples:
             count = count + 1
 
     replicate_output.to_excel(replicate_writer, sheet_name=s, index=False)
+    graph_input.append(replicate_output)
+
+    grapher.make_droplet_size_histogram(replicate_output, output_dirs, input_args)
+    if num_of_channels == 2:
+        grapher.make_droplet_intensity_scatter(replicate_output, output_dirs, input_args)
 
     temp_sample_output = helper.analyze_sample(metadata_sample, input_args, replicate_output, bulk_I, total_I)
 
@@ -125,8 +139,9 @@ replicate_writer.save()
 sample_writer.save()
 
 # make boxplot with all droplets
-
-
+grapher.make_droplet_boxplot(graph_input, output_dirs, input_args)
+print()
+print('Finished making plots at: ', datetime.now())
 
 # write parameters that were used for this analysis
 output_params = {'metadata_file'    : input_args.metadata_path,
