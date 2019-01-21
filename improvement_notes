@@ -26,6 +26,9 @@ TO DO:
 
 @Bug Need to fix the bulk random image. It's giving me strange results!
 
+Run correlation analysis on the intensity scatter
+
+Maybe run statistics on the droplet data automatically?
 
 Try calculating a different [bulk] by randomizing and averaging over many images.
 

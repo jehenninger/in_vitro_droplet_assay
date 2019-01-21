@@ -19,12 +19,13 @@ def make_droplet_boxplot(data, output_dirs, input_args):
         groups = [item for items in groups for item in items]
 
         fig, ax = plt.subplots()
-        ax.boxplot(plot_data, labels=groups, showfliers=False)
 
         for i in range(len(groups)):
             y = plot_data[i]
             x = np.random.normal(1 + i, 0.04, size=len(y))
-            ax.plot(x, y, 'b.', markersize=10, markeredgewidth=0, alpha=0.3)
+            ax.plot(x, y, 'b.', markersize=8, markeredgewidth=0, alpha=0.3)
+
+        ax.boxplot(plot_data, labels=groups, showfliers=False)
 
         plt.ylim(bottom=0)
         plt.ylabel(channel)
@@ -62,7 +63,7 @@ def make_droplet_intensity_scatter(data, output_dirs, input_args):
     sample_name = np.unique(data['sample'])[0]
 
     fig, ax = plt.subplots()
-    ax.plot(channel_a, channel_b, 'b.', markersize=15, markeredgewidth=0, alpha=0.3)
+    ax.plot(channel_a, channel_b, 'b.', markersize=5, markeredgewidth=0, alpha=0.3)
 
     plt.ylabel(mean_intensity_cols[1])
     plt.xlabel(mean_intensity_cols[0])
