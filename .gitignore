@@ -7,3 +7,4 @@ make_concentration_graphs_JEH.zip
 *.pyc
 *.png
 test_MED_CTD/metadata_output/output_analysis_parameters.txt
+*.eps

@@ -1,0 +1,143 @@
+2019-01-20 Directions to run in vitro droplet assay analysis
+
+Example files are in the "example" folder in the code directory (instructions below).
+
+##### RUNNING PROGRAM #####
+
+    Open Terminal and connect to Tak4:
+        $ ssh -Y username@tak4.wi.mit.edu
+
+    Go to directory with python code:
+        $ cd /lab/solexa_young/scratch/jon_henninger/tools/in_vitro_droplet_assay
+
+    Run Python virtual environment:
+
+        $ source venv/bin/activate
+
+    It should say "(venv)" to the left of your username
+
+    To run the script, run the following function with a required argument of an Excel
+    metadata file. You can also add optional arguments described below.
+
+    Without options:
+
+        $ main.py path/to/metadata/file.xlsx
+
+    With options (options can be in any order):
+
+        $ main.py path/to/metadata/file.xlsx --param1 input --param2 input
+
+    When you are completely finished, either close the Terminal window, or type:
+    $ deactivate
+
+    Which will take you out of the Python environment.
+
+##### REQUIRED ARGUMENTS #####
+
+	path to metadata file (e.g. /lab/solexa_young/scratch/metadata.xlsx). Path and data must be on Tak4-accessible
+	                                                                      server (like solexa_young or young_ata4)
+
+    Metadata has the following columns (column name MUST be exact):
+
+    image_path      :   full path to every channel image (.TIF)
+
+    experiment_name :   unique name for each sample/experiment. Items with the same
+                        experiment_name will be grouped together as replicates
+
+    replicate       :   integer number corresponding to replicate
+
+    channel_id      :   integer number corresponding to the channel (488, 561, 642)
+                        This will be used if the 'scaffold' parameter is set
+
+##### OPTIONAL ARGUMENTS #####
+
+    --o     :   Output directory name to use. Default is the name of the metadata folder with "_output" added to the
+                end. In both cases, the output directory will be stored in the same directory where the metadata
+                is stored.
+
+    --tm    :   Intensity threshold multiplier. Used to identify droplets. Pixels with intensity less than
+                    (mean_background_intensity + (standard_deviation_intensity * threshold_multiplier))
+                will be thresholded out. Default is 3 (so 3 std's above the mean).
+
+    --r     :   Subset circle area (in px^2). After droplets are detected, droplet intensity is calculated in three ways:
+                    (1) Mean intensity of whole droplet
+                    (2) Max intensity of whole droplet
+                    (3) Mean intensity of smaller inner subset of droplet
+
+                The (3) option is to account for intensity drop-off at the edge of droplets. The 'r' parameter controls
+                the radius of the circle centered on the center of droplet to measure. Default is 9 px^2.
+
+    --min_a :   Minimum area threshold for calling droplets. Default is 9 px^2.
+
+    --max_a :   Maximum area threshold for calling droplets. Default is 500 px^2
+
+    --circ  :   Circularity threshold for calling droplets. Circularity = (4pi * Area / Perimeter^2). Generally,
+                this calculation falls between [0, 1], where 1 is a perfect circle (a square is about 0.6-0.7).
+                Because these calculations are done on pixels that don't form perfect lines,
+                sometimes circularity can be bigger than 1. Default is 0.8.
+
+    --s     :   Channel to use for scaffold. Options are 488, 561, 642, or avg. Average scaffold will take the average
+                of all channels. Default is avg.
+
+    --b     :   Value for background subtraction. Just does a straight subtraction. Default is 0.0.
+
+    --pr    :   Droplet measurement to use for partition ratio. Options are:
+                'sub' for subset circle, 'mean' for mean intensity of whole droplet, 'max' for max intensity in droplet.
+                Default is 'sub'
+
+    --crop  :   Integer number to crop the image into a smaller square (width from image center in pixels).
+                Useful if uneven illumination at edges is a problem. Defaults to entire image (image_width/2)
+
+    --no-image  :   Flag that specifies not to output images of the called droplets that are saved to output.
+                    Will speed up the pipeline by a bit. Only need to write "--no-image"
+
+    --rand_bulk :   (STILL IN DEVELOPMENT; CAN'T BE USED YET)
+                    Flag that will calculate the bulk (C-out) differently. Intead of averaging outside the droplets,
+                    which could include uncalled droplets or out of focus droplets, it will randomly shuffle the image
+                    100 times and average across these random images. This should keep the same overall background but
+                    average out the droplets.
+
+##### OUTPUT #####
+
+    The output will contain the following directories in the same directory as the metadata file:
+
+    /individual/
+        /droplet_images/        : This will include pictures (.PNG) of the called droplets
+                                  to manually verify and/or tweak parameters.
+
+        individual_output.xlsx  : This will contain all output data from individual droplets with unique IDs for each
+                                  droplet. Each sheet is a unique experiment/sample.
+
+        scatter plots           : If there are two channels, then there will be scatter plot outputs of the droplet
+                                  intensities in each channel plotted against each other.
+
+        box plots               : Box and dot plots of the partition ratios for all droplets for every experimental
+                                  condition for all channels
+
+        histogram plots         : Histograms of droplet areas for all experiments. Not on same scale.
+
+    /summary/
+
+        summary_output.xlsx     : This will contain all averaged output data from individual images of droplets.
+
+        error bar plots         : Error bar plots of partition ratios and condensed fraction for every channel
+                                  (WARNING: Not 100% sure that condensed fraction calculations are working correctly).
+
+    output_analysis_parameters.txt  : A text file that shows the parameters used for the most recent run.
+                                      This file will be written over every analysis unless you change the name.
+
+
+______________TEST___________________
+
+To make sure pipeline is working:
+
+Open Terminal
+
+        $ cd /lab/solexa_young/scratch/jon_henninger/tools/in_vitro_droplet_assay
+        $ source venv/bin/activate
+        $ main.py ./example/metadata.xlsx --o YOUR_NAME
+        $ deactivate
+
+Program should run in Terminal and give you progress updates. It should finish with exit code 0. Then,
+you should see an output folder with your name in the examples folder. The deactivate takes you out of the python
+environment. You don't have to deactivate if you want to keep running analyses. Only do it at the end
