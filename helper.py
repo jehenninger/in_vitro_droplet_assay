@@ -308,9 +308,10 @@ def analyze_replicate(metadata, input_args, output_dirs):
     droplet_id_centroid_c = []
 
     # iterate over regions to collect information on individual droplets
+    s = sample_name
+    r = replicate_name
     for i, region in enumerate(scaffold_filtered_regionprops):
-        s = sample_name
-        r = replicate_name
+
         area = region.area
 
         use_min_area_flag = False  # this is if the subset area is less than the min droplet area parameter. In this case, we just use the min area.
