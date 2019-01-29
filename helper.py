@@ -459,81 +459,81 @@ def analyze_sample(metadata, input_args, replicate_output, bulk_I, total_I):
                                               'partition_ratio_std_'            + str(channels[1]),
                                               'condensed_fraction_mean_'        + str(channels[1]),
                                               'condensed_fraction_std_'         + str(channels[1])])
+    if len(replicate_output) > 0:
+        replicate_partition_ratio = []
+        replicate_condensed_fraction = []
 
-    replicate_partition_ratio = []
-    replicate_condensed_fraction = []
+        if num_of_channels == 1:
+            for idx, r in enumerate(replicates):
+                mean_partition_ratio = np.mean(
+                    replicate_output['partition_ratio_' + str(channels)][replicate_output['replicate'] == r])
 
-    if num_of_channels == 1:
-        for idx, r in enumerate(replicates):
-            mean_partition_ratio = np.mean(
-                replicate_output['partition_ratio_' + str(channels)][replicate_output['replicate'] == r])
+                replicate_partition_ratio.append(mean_partition_ratio)
 
-            replicate_partition_ratio.append(mean_partition_ratio)
+                condensed_fraction = np.sum(
+                    replicate_output['total_I_' + str(channels)][replicate_output['replicate'] == r])/total_I[idx]
 
-            condensed_fraction = np.sum(
-                replicate_output['total_I_' + str(channels)][replicate_output['replicate'] == r])/total_I[idx]
+                replicate_condensed_fraction.append(condensed_fraction)
 
-            replicate_condensed_fraction.append(condensed_fraction)
+            sample_partition_ratio_mean = np.mean(replicate_partition_ratio)
+            sample_partition_ratio_std = np.std(replicate_partition_ratio)
 
-        sample_partition_ratio_mean = np.mean(replicate_partition_ratio)
-        sample_partition_ratio_std = np.std(replicate_partition_ratio)
+            sample_condensed_fraction_mean = np.mean(replicate_condensed_fraction)
+            sample_condensed_fraction_std = np.std(replicate_condensed_fraction)
 
-        sample_condensed_fraction_mean = np.mean(replicate_condensed_fraction)
-        sample_condensed_fraction_std = np.std(replicate_condensed_fraction)
+            sample_output = sample_output.append({'sample': sample_name,
+                                                  'partition_ratio_mean_' + str(channels): sample_partition_ratio_mean,
+                                                  'partition_ratio_std_' + str(channels): sample_partition_ratio_std,
+                                                  'condensed_fraction_mean_' + str(channels): sample_condensed_fraction_mean,
+                                                  'condensed_fraction_std_' + str(channels): sample_condensed_fraction_std},
+                                                  ignore_index=True)
 
-        sample_output = sample_output.append({'sample': sample_name,
-                                              'partition_ratio_mean_' + str(channels): sample_partition_ratio_mean,
-                                              'partition_ratio_std_' + str(channels): sample_partition_ratio_std,
-                                              'condensed_fraction_mean_' + str(channels): sample_condensed_fraction_mean,
-                                              'condensed_fraction_std_' + str(channels): sample_condensed_fraction_std},
-                                              ignore_index=True)
+        elif num_of_channels == 2:
+            count = 0
+            for idx, r in enumerate(replicates):
+                # client_a
+                mean_partition_ratio = np.mean(
+                    replicate_output['partition_ratio_' + str(channels[0])][replicate_output['replicate'] == r])
+                replicate_partition_ratio.append(mean_partition_ratio)
 
-    elif num_of_channels == 2:
-        count = 0
-        for idx, r in enumerate(replicates):
-            # client_a
-            mean_partition_ratio = np.mean(
-                replicate_output['partition_ratio_' + str(channels[0])][replicate_output['replicate'] == r])
-            replicate_partition_ratio.append(mean_partition_ratio)
+                condensed_fraction = np.sum(
+                    replicate_output['total_I_' + str(channels[0])][replicate_output['replicate'] == r]) / total_I[count]
+                replicate_condensed_fraction.append(condensed_fraction)
 
-            condensed_fraction = np.sum(
-                replicate_output['total_I_' + str(channels[0])][replicate_output['replicate'] == r]) / total_I[count]
-            replicate_condensed_fraction.append(condensed_fraction)
+                # client_b
+                mean_partition_ratio = np.mean(
+                    replicate_output['partition_ratio_' + str(channels[1])][replicate_output['replicate'] == r])
+                replicate_partition_ratio.append(mean_partition_ratio)
 
-            # client_b
-            mean_partition_ratio = np.mean(
-                replicate_output['partition_ratio_' + str(channels[1])][replicate_output['replicate'] == r])
-            replicate_partition_ratio.append(mean_partition_ratio)
+                condensed_fraction = np.sum(
+                    replicate_output['total_I_' + str(channels[1])][replicate_output['replicate'] == r]) / total_I[count+1]  #@Bug Should this be +1? I think so, but need to check.
+                replicate_condensed_fraction.append(condensed_fraction)
 
-            condensed_fraction = np.sum(
-                replicate_output['total_I_' + str(channels[1])][replicate_output['replicate'] == r]) / total_I[count+1]  #@Bug Should this be +1? I think so, but need to check.
-            replicate_condensed_fraction.append(condensed_fraction)
+                count = count + 2  # 2 here because we append both total_I's to the same list
 
-            count = count + 2  # 2 here because we append both total_I's to the same list
+            sample_client_a_partition_ratio_mean = np.mean(replicate_partition_ratio[::2])  # every other since we append both clients
+            sample_client_a_partition_ratio_std = np.std(replicate_partition_ratio[::2])
 
-        sample_client_a_partition_ratio_mean = np.mean(replicate_partition_ratio[::2])  # every other since we append both clients
-        sample_client_a_partition_ratio_std = np.std(replicate_partition_ratio[::2])
+            sample_client_a_condensed_fraction_mean = np.mean(replicate_condensed_fraction[::2])
+            sample_client_a_condensed_fraction_std = np.std(replicate_condensed_fraction[::2])
 
-        sample_client_a_condensed_fraction_mean = np.mean(replicate_condensed_fraction[::2])
-        sample_client_a_condensed_fraction_std = np.std(replicate_condensed_fraction[::2])
+            sample_client_b_partition_ratio_mean = np.mean(
+                replicate_partition_ratio[1::2])  # every other since we append both clients
+            sample_client_b_partition_ratio_std = np.std(replicate_partition_ratio[1::2])
 
-        sample_client_b_partition_ratio_mean = np.mean(
-            replicate_partition_ratio[1::2])  # every other since we append both clients
-        sample_client_b_partition_ratio_std = np.std(replicate_partition_ratio[1::2])
+            sample_client_b_condensed_fraction_mean = np.mean(replicate_condensed_fraction[1::2])
+            sample_client_b_condensed_fraction_std = np.std(replicate_condensed_fraction[1::2])
 
-        sample_client_b_condensed_fraction_mean = np.mean(replicate_condensed_fraction[1::2])
-        sample_client_b_condensed_fraction_std = np.std(replicate_condensed_fraction[1::2])
-
-        sample_output = sample_output.append({'sample': sample_name,
-                                              'partition_ratio_mean_' +    str(channels[0]): sample_client_a_partition_ratio_mean,
-                                              'partition_ratio_std_' +     str(channels[0]): sample_client_a_partition_ratio_std,
-                                              'condensed_fraction_mean_' + str(channels[0]): sample_client_a_condensed_fraction_mean,
-                                              'condensed_fraction_std_' +  str(channels[0]): sample_client_a_condensed_fraction_std,
-                                              'partition_ratio_mean_' +    str(channels[1]): sample_client_b_partition_ratio_mean,
-                                              'partition_ratio_std_' +     str(channels[1]): sample_client_b_partition_ratio_std,
-                                              'condensed_fraction_mean_' + str(channels[1]): sample_client_b_condensed_fraction_mean,
-                                              'condensed_fraction_std_' +  str(channels[1]): sample_client_b_condensed_fraction_std
-                                              }, ignore_index=True)
+            sample_output = sample_output.append({'sample': sample_name,
+                                                  'partition_ratio_mean_' +    str(channels[0]): sample_client_a_partition_ratio_mean,
+                                                  'partition_ratio_std_' +     str(channels[0]): sample_client_a_partition_ratio_std,
+                                                  'condensed_fraction_mean_' + str(channels[0]): sample_client_a_condensed_fraction_mean,
+                                                  'condensed_fraction_std_' +  str(channels[0]): sample_client_a_condensed_fraction_std,
+                                                  'partition_ratio_mean_' +    str(channels[1]): sample_client_b_partition_ratio_mean,
+                                                  'partition_ratio_std_' +     str(channels[1]): sample_client_b_partition_ratio_std,
+                                                  'condensed_fraction_mean_' + str(channels[1]): sample_client_b_condensed_fraction_mean,
+                                                  'condensed_fraction_std_' +  str(channels[1]): sample_client_b_condensed_fraction_std
+                                                  }, ignore_index=True)
     return sample_output
 
 

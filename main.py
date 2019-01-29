@@ -106,9 +106,11 @@ for s in samples:
     replicate_output.to_excel(replicate_writer, sheet_name=s, index=False)
     graph_input.append(replicate_output)
 
-    grapher.make_droplet_size_histogram(replicate_output, output_dirs, input_args)
-    if num_of_channels == 2:
-        grapher.make_droplet_intensity_scatter(replicate_output, output_dirs, input_args)
+    if len(replicate_output > 0):
+        grapher.make_droplet_size_histogram(replicate_output, output_dirs, input_args)
+
+        if num_of_channels == 2:
+            grapher.make_droplet_intensity_scatter(replicate_output, output_dirs, input_args)
 
     temp_sample_output = helper.analyze_sample(metadata_sample, input_args, replicate_output, bulk_I, total_I)
 
@@ -139,8 +141,12 @@ replicate_writer.save()
 sample_writer.save()
 
 # make boxplot with all droplets
-grapher.make_droplet_boxplot(graph_input, output_dirs, input_args)
-grapher.make_average_sample_graph(sample_output, output_dirs, input_args)
+if len(graph_input) > 0:
+    grapher.make_droplet_boxplot(graph_input, output_dirs, input_args)
+
+if len(sample_output) > 0:
+    grapher.make_average_sample_graph(sample_output, output_dirs, input_args)
+
 print()
 print('Finished making plots at: ', datetime.now())
 
