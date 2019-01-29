@@ -47,6 +47,9 @@ def read_metadata(input_args):
     for key, folder in output_dirs.items():
         if key is not 'output_parent':
             if not os.path.isdir(folder):
+                if not os.path.isdir(os.path.dirname(folder)):  # so I guess .items() is random order of dictionary keys. So when making subfolders, if the parent doesn't exist, then we would get an error. This accounts for that.
+                        os.mkdir(os.path.dirname(folder))
+
                 os.mkdir(folder)
 
 
@@ -310,107 +313,141 @@ def analyze_replicate(metadata, input_args, output_dirs):
     # iterate over regions to collect information on individual droplets
     s = sample_name
     r = replicate_name
-    for i, region in enumerate(scaffold_filtered_regionprops):
+    if len(scaffold_filtered_regionprops) < 1:
+        if num_of_channels == 1:
+            replicate_output = replicate_output.append({'sample': s, 'replicate': r,
+                                                        'droplet_id': 0,
+                                                        'subset_I_' + str(channels): 0.0,
+                                                        'mean_I_' + str(channels): 0.0,
+                                                        'max_I_' + str(channels): 0.0,
+                                                        'total_I_' + str(channels): 0.0,
+                                                        'bulk_I_' + str(channels): 0.0,
+                                                        'partition_ratio_' + str(channels): 0.0,
+                                                        'area': area, 'centroid_r': 0.0,
+                                                        'centroid_c': 0.0,
+                                                        'circularity': 0.0},
+                                                       ignore_index=True)
+        elif num_of_channels == 2:
+            replicate_output = replicate_output.append({'sample': s, 'replicate': r, 'droplet_id': 0,
+                                                        'subset_I_' + str(channels[0]): 0.0,
+                                                        'subset_I_' + str(channels[1]): 0.0,
+                                                        'mean_I_' + str(channels[0]): 0.0,
+                                                        'mean_I_' + str(channels[1]): 0.0,
+                                                        'max_I_' + str(channels[0]): 0.0,
+                                                        'max_I_' + str(channels[1]): 0.0,
+                                                        'total_I_' + str(channels[0]): 0.0,
+                                                        'total_I_' + str(channels[1]): 0.0,
+                                                        'bulk_I_' + str(channels[0]): 0.0,
+                                                        'bulk_I_' + str(channels[1]): 0.0,
+                                                        'partition_ratio_' + str(channels[0]): 0.0,
+                                                        'partition_ratio_' + str(channels[1]): 0.0,
+                                                        'area': 0.0, 'centroid_r': 0.0,
+                                                        'centroid_c': 0.0,
+                                                        'circularity': 0.0},
+                                                       ignore_index=True)
 
-        area = region.area
+    else:
+        for i, region in enumerate(scaffold_filtered_regionprops):
 
-        use_min_area_flag = False  # this is if the subset area is less than the min droplet area parameter. In this case, we just use the min area.
-        if subset_area_less_than_min_area_flag:
-            if area < subset_area:
-                use_min_area_flag = True
+            area = region.area
 
-        centroid_r, centroid_c = region.centroid
-        circularity = circ(region)
-        coordinates = region.coords
-        coords_r = coordinates[:, 0]
-        coords_c = coordinates[:, 1]
+            use_min_area_flag = False  # this is if the subset area is less than the min droplet area parameter. In this case, we just use the min area.
+            if subset_area_less_than_min_area_flag:
+                if area < subset_area:
+                    use_min_area_flag = True
 
-        if use_min_area_flag:
-            subset_coords_r = coords_r
-            subset_coords_c = coords_c
-        else:
-            subset_coords_r, subset_coords_c = draw.circle(r=centroid_r, c=centroid_c,
-                                                           radius=round(math.sqrt(subset_area)))
+            centroid_r, centroid_c = region.centroid
+            circularity = circ(region)
+            coordinates = region.coords
+            coords_r = coordinates[:, 0]
+            coords_c = coordinates[:, 1]
 
-        # in cases where droplets are near the edge, the circle will go beyond the image. In that case,
-        # we simply ignore the droplet
-        edge_r_test = all(0 < r < scaffold.shape[0] for r in subset_coords_r)
-        edge_c_test = all(0 < c < scaffold.shape[1] for c in subset_coords_c)
+            if use_min_area_flag:
+                subset_coords_r = coords_r
+                subset_coords_c = coords_c
+            else:
+                subset_coords_r, subset_coords_c = draw.circle(r=centroid_r, c=centroid_c,
+                                                               radius=round(math.sqrt(subset_area)))
 
-        if edge_r_test and edge_c_test:
-            label_image[coords_r, coords_c] = True
-            droplet_id = i
-            droplet_id_list.append(droplet_id)
-            droplet_id_centroid_r.append(centroid_r)
-            droplet_id_centroid_c.append(centroid_c)
+            # in cases where droplets are near the edge, the circle will go beyond the image. In that case,
+            # we simply ignore the droplet
+            edge_r_test = all(0 < r < scaffold.shape[0] for r in subset_coords_r)
+            edge_c_test = all(0 < c < scaffold.shape[1] for c in subset_coords_c)
 
-            if num_of_channels == 1:
-                mean_intensity = region.mean_intensity * 65536
-                max_intensity = region.max_intensity * 65536
-                subset_intensity = np.mean(client_a[subset_coords_r, subset_coords_c]) * 65536
-                total_intensity = np.sum(client_a[coords_r, coords_c]) * 65536
+            if edge_r_test and edge_c_test:
+                label_image[coords_r, coords_c] = True
+                droplet_id = i
+                droplet_id_list.append(droplet_id)
+                droplet_id_centroid_r.append(centroid_r)
+                droplet_id_centroid_c.append(centroid_c)
 
-                if pr_parameter is 'sub':
-                    partition_ratio = subset_intensity/bulk_I
-                elif pr_parameter is 'mean':
-                    partition_ratio = mean_intensity/bulk_I
-                elif pr_parameter is 'max':
-                    partition_ratio = max_intensity/bulk_I
-                else:
-                    partition_ratio = -2  # just a sanity check. Should never happen.
+                if num_of_channels == 1:
+                    mean_intensity = region.mean_intensity * 65536
+                    max_intensity = region.max_intensity * 65536
+                    subset_intensity = np.mean(client_a[subset_coords_r, subset_coords_c]) * 65536
+                    total_intensity = np.sum(client_a[coords_r, coords_c]) * 65536
+
+                    if pr_parameter is 'sub':
+                        partition_ratio = subset_intensity/bulk_I
+                    elif pr_parameter is 'mean':
+                        partition_ratio = mean_intensity/bulk_I
+                    elif pr_parameter is 'max':
+                        partition_ratio = max_intensity/bulk_I
+                    else:
+                        partition_ratio = -2  # just a sanity check. Should never happen.
 
 
-                replicate_output = replicate_output.append({'sample': s, 'replicate': r,
-                                                            'droplet_id': droplet_id,
-                                                            'subset_I_' + str(channels): subset_intensity,
-                                                            'mean_I_' + str(channels): mean_intensity,
-                                                            'max_I_' + str(channels): max_intensity,
-                                                            'total_I_' + str(channels): total_intensity,
-                                                            'bulk_I_' + str(channels): bulk_I,
-                                                            'partition_ratio_' + str(channels): partition_ratio,
-                                                            'area': area, 'centroid_r': centroid_r, 'centroid_c': centroid_c,
-                                                            'circularity': circularity},
-                                                           ignore_index=True)
+                    replicate_output = replicate_output.append({'sample': s, 'replicate': r,
+                                                                'droplet_id': droplet_id,
+                                                                'subset_I_' + str(channels): subset_intensity,
+                                                                'mean_I_' + str(channels): mean_intensity,
+                                                                'max_I_' + str(channels): max_intensity,
+                                                                'total_I_' + str(channels): total_intensity,
+                                                                'bulk_I_' + str(channels): bulk_I,
+                                                                'partition_ratio_' + str(channels): partition_ratio,
+                                                                'area': area, 'centroid_r': centroid_r, 'centroid_c': centroid_c,
+                                                                'circularity': circularity},
+                                                               ignore_index=True)
 
-            elif num_of_channels == 2:
-                mean_intensity_a = np.mean(client_a[coords_r, coords_c]) * 65536
-                mean_intensity_b = np.mean(client_b[coords_r, coords_c]) * 65536
+                elif num_of_channels == 2:
+                    mean_intensity_a = np.mean(client_a[coords_r, coords_c]) * 65536
+                    mean_intensity_b = np.mean(client_b[coords_r, coords_c]) * 65536
 
-                max_intensity_a = np.max(client_a[coords_r, coords_c]) * 65536
-                max_intensity_b = np.max(client_b[coords_r, coords_c]) * 65536
+                    max_intensity_a = np.max(client_a[coords_r, coords_c]) * 65536
+                    max_intensity_b = np.max(client_b[coords_r, coords_c]) * 65536
 
-                subset_intensity_a = np.mean(client_a[subset_coords_r, subset_coords_c]) * 65536
-                subset_intensity_b = np.mean(client_b[subset_coords_r, subset_coords_c]) * 65536
+                    subset_intensity_a = np.mean(client_a[subset_coords_r, subset_coords_c]) * 65536
+                    subset_intensity_b = np.mean(client_b[subset_coords_r, subset_coords_c]) * 65536
 
-                total_intensity_a = np.sum(client_a[coords_r, coords_c]) * 65536
-                total_intensity_b = np.sum(client_b[coords_r, coords_c]) * 65536
+                    total_intensity_a = np.sum(client_a[coords_r, coords_c]) * 65536
+                    total_intensity_b = np.sum(client_b[coords_r, coords_c]) * 65536
 
-                if pr_parameter is 'sub':
-                    partition_ratio_a = subset_intensity_a/bulk_I[0]
-                    partition_ratio_b = subset_intensity_b/bulk_I[1]
-                elif pr_parameter is 'mean':
-                    partition_ratio_a = mean_intensity_a / bulk_I[0]
-                    partition_ratio_b = mean_intensity_b / bulk_I[1]
-                elif pr_parameter is 'max':
-                    partition_ratio_a = max_intensity_a / bulk_I[0]
-                    partition_ratio_b = max_intensity_b / bulk_I[1]
+                    if pr_parameter is 'sub':
+                        partition_ratio_a = subset_intensity_a/bulk_I[0]
+                        partition_ratio_b = subset_intensity_b/bulk_I[1]
+                    elif pr_parameter is 'mean':
+                        partition_ratio_a = mean_intensity_a / bulk_I[0]
+                        partition_ratio_b = mean_intensity_b / bulk_I[1]
+                    elif pr_parameter is 'max':
+                        partition_ratio_a = max_intensity_a / bulk_I[0]
+                        partition_ratio_b = max_intensity_b / bulk_I[1]
 
-                replicate_output = replicate_output.append({'sample': s, 'replicate': r, 'droplet_id': droplet_id,
-                                                            'subset_I_'+str(channels[0]): subset_intensity_a,
-                                                            'subset_I_'+str(channels[1]): subset_intensity_b,
-                                                            'mean_I_' + str(channels[0]): mean_intensity_a,
-                                                            'mean_I_' + str(channels[1]): mean_intensity_b,
-                                                            'max_I_' + str(channels[0]): max_intensity_a,
-                                                            'max_I_' + str(channels[1]): max_intensity_b,
-                                                            'total_I_' + str(channels[0]): total_intensity_a,
-                                                            'total_I_' + str(channels[1]): total_intensity_b,
-                                                            'bulk_I_' + str(channels[0]): bulk_I[0],
-                                                            'bulk_I_' + str(channels[1]): bulk_I[1],
-                                                            'partition_ratio_' + str(channels[0]): partition_ratio_a,
-                                                            'partition_ratio_' + str(channels[1]): partition_ratio_b,
-                                                            'area': area, 'centroid_r': centroid_r, 'centroid_c': centroid_c,
-                                                            'circularity': circularity},
-                                                           ignore_index=True)
+                    replicate_output = replicate_output.append({'sample': s, 'replicate': r, 'droplet_id': droplet_id,
+                                                                'subset_I_'+str(channels[0]): subset_intensity_a,
+                                                                'subset_I_'+str(channels[1]): subset_intensity_b,
+                                                                'mean_I_' + str(channels[0]): mean_intensity_a,
+                                                                'mean_I_' + str(channels[1]): mean_intensity_b,
+                                                                'max_I_' + str(channels[0]): max_intensity_a,
+                                                                'max_I_' + str(channels[1]): max_intensity_b,
+                                                                'total_I_' + str(channels[0]): total_intensity_a,
+                                                                'total_I_' + str(channels[1]): total_intensity_b,
+                                                                'bulk_I_' + str(channels[0]): bulk_I[0],
+                                                                'bulk_I_' + str(channels[1]): bulk_I[1],
+                                                                'partition_ratio_' + str(channels[0]): partition_ratio_a,
+                                                                'partition_ratio_' + str(channels[1]): partition_ratio_b,
+                                                                'area': area, 'centroid_r': centroid_r, 'centroid_c': centroid_c,
+                                                                'circularity': circularity},
+                                                               ignore_index=True)
 
     if input_args.output_image_flag:
         if input_args.randomize_bulk_flag:
@@ -534,6 +571,35 @@ def analyze_sample(metadata, input_args, replicate_output, bulk_I, total_I):
                                                   'condensed_fraction_mean_' + str(channels[1]): sample_client_b_condensed_fraction_mean,
                                                   'condensed_fraction_std_' +  str(channels[1]): sample_client_b_condensed_fraction_std
                                                   }, ignore_index=True)
+
+    else:
+        if num_of_channels == 1:
+            sample_output = sample_output.append({'sample': sample_name,
+                                                  'partition_ratio_mean_' + str(channels): 0.0,
+                                                  'partition_ratio_std_' + str(channels): 0.0,
+                                                  'condensed_fraction_mean_' + str(channels): 0.0,
+                                                  'condensed_fraction_std_' + str(channels): 0.0},
+                                                  ignore_index=True)
+        elif num_of_channels == 2:
+            sample_output = sample_output.append({'sample': sample_name,
+                                                  'partition_ratio_mean_' + str(
+                                                      channels[0]): 0.0,
+                                                  'partition_ratio_std_' + str(
+                                                      channels[0]): 0.0,
+                                                  'condensed_fraction_mean_' + str(
+                                                      channels[0]): 0.0,
+                                                  'condensed_fraction_std_' + str(
+                                                      channels[0]): 0.0,
+                                                  'partition_ratio_mean_' + str(
+                                                      channels[1]): 0,
+                                                  'partition_ratio_std_' + str(
+                                                      channels[1]): 0.0,
+                                                  'condensed_fraction_mean_' + str(
+                                                      channels[1]): 0.0,
+                                                  'condensed_fraction_std_' + str(
+                                                      channels[1]): 0.0
+                                                  }, ignore_index=True)
+
     return sample_output
 
 

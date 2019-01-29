@@ -22,9 +22,18 @@ def make_droplet_boxplot(data, output_dirs, input_args):
 
         for i in range(len(groups)):
             y = plot_data[i]
-            x = np.random.normal(1 + i, 0.04, size=len(y))
+            if len(y) < 1 or y.empty:
+                y = 0
+                x = 1 + i
+                plot_data[i] = 0.0
+            else:
+                x = np.random.normal(1 + i, 0.04, size=len(y))
+
             ax.plot(x, y, 'b.', markersize=8, markeredgewidth=0, alpha=0.3)
 
+        print(len(plot_data))
+        print()
+        print(groups)
         ax.boxplot(plot_data, labels=groups, showfliers=False)
 
         plt.ylim(bottom=0)
