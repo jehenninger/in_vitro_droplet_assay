@@ -31,9 +31,7 @@ def make_droplet_boxplot(data, output_dirs, input_args):
 
             ax.plot(x, y, 'b.', markersize=8, markeredgewidth=0, alpha=0.3)
 
-        print(len(plot_data))
-        print()
-        print(groups)
+
         ax.boxplot(plot_data, labels=groups, showfliers=False)
 
         plt.ylim(bottom=0)
