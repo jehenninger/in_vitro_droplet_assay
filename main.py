@@ -47,6 +47,7 @@ parser.add_argument('--crop', type=int)  # width from center point to include in
 
 parser.add_argument('--no-image', dest='output_image_flag', action='store_false', default=True)  # flag to set whether output images of the droplets are saved to a directory
 parser.add_argument('--rand-bulk', dest='randomize_bulk_flag', action='store_true', default=False)  # flag to calculate bulk by randomzing the image 100 times and taking the average intensity
+parser.add_argument('--no_meta', dest='metadata_flag', action='store_false', default=True)  # flag to automatically parse experiment from folders instead of providing metadata.
 # parser.add_argument('--no-bsub', dest='bsub_flag', action='store_false', default=True)  # @Deprecated
 
 

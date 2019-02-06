@@ -13,6 +13,7 @@ from matplotlib import patches
 import argparse
 import json
 from datetime import datetime
+from types import SimpleNamespace
 
 circ = lambda r: (4 * math.pi * r.area) / (r.perimeter * r.perimeter)
 
@@ -64,6 +65,8 @@ def analyze_replicate(metadata, input_args, output_dirs):
     channels = np.unique(metadata['channel_id'])
     num_of_channels = len(channels)
 
+    image_type = SimpleNamespace()
+
     if num_of_channels > 2:
         print('ERROR: Currently can only do up to 2 channels')
         sys.exit(0)
@@ -81,7 +84,7 @@ def analyze_replicate(metadata, input_args, output_dirs):
                 sys.exit(0)
 
     bsub_flag = False
-    if input_args.b > 0:
+    if input_args.b > 0.0:
         background_value_to_subtract = input_args.b
         bsub_flag = True
 
@@ -93,6 +96,7 @@ def analyze_replicate(metadata, input_args, output_dirs):
             if scaffold_test[idx]:
                 scaffold_image_path = metadata['image_path'][idx]
                 scaffold = io.imread(scaffold_image_path)
+                image_type.scaffold = scaffold.dtype
                 scaffold = img_as_float(scaffold)
                 client_a = scaffold
                 scaffold_image_flag = True
@@ -108,6 +112,7 @@ def analyze_replicate(metadata, input_args, output_dirs):
                 count = 0
                 if idx == 0:
                     avg_image = io.imread(metadata['image_path'][idx])
+                    image_type.scaffold = avg_image.dtype
                     avg_image = img_as_float(avg_image)
                     client_a = avg_image
                     count = count + 1
@@ -161,11 +166,20 @@ def analyze_replicate(metadata, input_args, output_dirs):
 
     # background subtraction
     if bsub_flag:
+        if image_type.scaffold.name == 'uint16':
+            background_value_to_subtract = background_value_to_subtract/65536
+        elif image_type.scaffold.name == 'uint8':
+            background_value_to_subtract = background_value_to_subtract/256
+
         scaffold = scaffold - background_value_to_subtract
+        scaffold[scaffold < 0] = 0
+
         client_a = client_a - background_value_to_subtract
+        client_a[client_a < 0] = 0
 
         if client_b_image_flag:
             client_b = client_b - background_value_to_subtract
+            client_b[client_b < 0] = 0
 
     # find std of image for later thresholding
     scaffold_std = np.std(scaffold)
