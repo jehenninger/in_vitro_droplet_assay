@@ -47,7 +47,7 @@ parser.add_argument('--crop', type=int)  # width from center point to include in
 
 parser.add_argument('--no-image', dest='output_image_flag', action='store_false', default=True)  # flag to set whether output images of the droplets are saved to a directory
 parser.add_argument('--rand-bulk', dest='randomize_bulk_flag', action='store_true', default=False)  # flag to calculate bulk by randomzing the image 100 times and taking the average intensity
-parser.add_argument('--no_meta', dest='metadata_flag', action='store_false', default=True)  # flag to automatically parse experiment from folders instead of providing metadata.
+parser.add_argument('--no-meta', dest='metadata_flag', action='store_false', default=True)  # flag to automatically parse experiment from folders instead of providing metadata.
 # parser.add_argument('--no-bsub', dest='bsub_flag', action='store_false', default=True)  # @Deprecated
 
 
@@ -56,14 +56,54 @@ input_args = parser.parse_args()
 # load and check metadata
 # metadata_path = '/Users/jon/PycharmProjects/in_vitro_droplet_assay/test_MED_CTD/metadata.xlsx'
 # metadata, output_dirs = helper.read_metadata(input_args, metadata_path)  # @Temporary
-metadata, output_dirs = helper.read_metadata(input_args)
 
-# get number of unique experiments
-samples = np.unique(metadata['experiment_name'])
-num_of_samples = len(samples)
+if input_args.metadata_flag:
+    metadata, output_dirs = helper.read_metadata(input_args)
+    # get number of unique experiments
+    samples = np.unique(metadata['experiment_name'])
+    num_of_samples = len(samples)
 
-channels = np.unique(metadata['channel_id'])
-num_of_channels = len(channels)
+    channels = np.unique(metadata['channel_id'])
+    num_of_channels = len(channels)
+else:
+    metadata = pd.DataFrame(columns=['image_path', 'experiment_name', 'replicate', 'channel_id'])
+    # get number of experiments/sub-directories to analyze
+    dir_list = os.listdir(input_args.metadata_path)
+    dir_list.sort(reverse=False)
+    file_ext = ".nd"
+
+
+    samples = []
+    for folder in dir_list:
+        if not folder.startswith('.') and not folder.endswith('output') and \
+            os.path.isdir(os.path.join(input_args.metadata_path, folder)):
+
+            samples.append(folder)
+            file_list = os.listdir(os.path.join(input_args.metadata_path, folder))
+
+            base_name_files = [f for f in file_list if file_ext in f
+                               and os.path.isfile(os.path.join(input_args.metadata_path, folder, f))]
+
+            base_name_files.sort(reverse=False)
+
+            count = 1
+            for idx, file in enumerate(base_name_files):
+                sample_name = file.replace(file_ext, '')
+                replicate_files = [os.path.join(input_args.metadata_path, folder, r) for r in file_list if sample_name in r
+                                   and os.path.isfile(os.path.join(input_args.metadata_path, folder, r))
+                                   and file_ext not in r]
+                replicate_files = np.sort(replicate_files)
+                for rep in replicate_files:
+                    metadata = metadata.append({'image_path' : rep,
+                                                'experiment_name' : folder,
+                                                'replicate' : count,
+                                                'channel_id' : int(helper.find_image_channel_name(rep))
+                                                }, ignore_index=True)
+                count += 1
+
+            num_of_channels = len(replicate_files)
+
+    output_dirs = helper.make_output_directories(input_args.metadata_path, 'metadata', input_args)
 
 replicate_writer = pd.ExcelWriter(os.path.join(output_dirs['output_individual'], 'individual_droplet_output.xlsx'),
                                   engine='xlsxwriter')
@@ -77,6 +117,7 @@ sample_count = 0
 for s in samples:
     print()
     print("Sample: ", s)
+
     metadata_sample = metadata[(metadata['experiment_name'] == s)].copy()
     metadata_sample = metadata_sample.reset_index(drop=True)
 

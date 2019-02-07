@@ -19,6 +19,7 @@ circ = lambda r: (4 * math.pi * r.area) / (r.perimeter * r.perimeter)
 
 # def read_metadata(input_args, metadata_path):
 def read_metadata(input_args):
+
     metadata_path = input_args.metadata_path
 
     metadata_dir = os.path.dirname(metadata_path)
@@ -29,6 +30,13 @@ def read_metadata(input_args):
         print('ERROR: Could not read or find  metadata file')
         sys.exit(0)
 
+    output_dirs = make_output_directories(metadata_dir, metadata_name, input_args)
+
+    metadata = pd.read_excel(metadata_path)
+
+    return metadata, output_dirs
+
+def make_output_directories(metadata_dir, metadata_name, input_args):
     if input_args.o:
         output_parent_dir = os.path.join(metadata_dir, input_args.o)
         # output_dirs.append(os.path.join(metadata_dir, input_args.o))
@@ -53,16 +61,14 @@ def read_metadata(input_args):
 
                 os.mkdir(folder)
 
-
-    metadata = pd.read_excel(metadata_path)
-
-    return metadata, output_dirs
-
+    return output_dirs
 
 def analyze_replicate(metadata, input_args, output_dirs):
     sample_name = np.unique(metadata['experiment_name'])[0]
     replicate_name = np.unique(metadata['replicate'])[0]
     channels = np.unique(metadata['channel_id'])
+    channels = np.sort(channels)
+
     num_of_channels = len(channels)
 
     image_type = SimpleNamespace()
@@ -693,3 +699,9 @@ def make_droplet_image(output_path, orig_image, scaffold_image, label_image, num
 
         plt.savefig(os.path.join(output_path, name + '_randomized_bulk.png'))
         plt.close()
+
+def find_image_channel_name(file_name):
+    str_idx = file_name.find('Conf ')  # this is specific to our microscopes file name format
+    channel_name = file_name[str_idx + 5 : str_idx + 8]
+
+    return channel_name
