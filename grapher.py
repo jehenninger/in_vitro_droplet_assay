@@ -34,8 +34,12 @@ def make_droplet_boxplot(data, output_dirs, input_args):
 
         ax.boxplot(plot_data, labels=groups, showfliers=False)
 
+        plt.xticks(rotation=45)
+
         plt.ylim(bottom=0)
         plt.ylabel(channel)
+
+        plt.tight_layout()
 
         plt.savefig(os.path.join(output_dirs['output_individual'], channel + '_droplet_boxplot.png'), dpi=300, format='png')
         plt.savefig(os.path.join(output_dirs['output_individual'], channel + '_droplet_boxplot.eps'), format='eps')

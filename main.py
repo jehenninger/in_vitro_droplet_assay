@@ -4,6 +4,7 @@ import pandas as pd
 import numpy as np
 import os
 import sys
+import math
 #import matplotlib
 # matplotlib.use('Agg')
 # matplotlib.use('Qt5Agg')
@@ -145,7 +146,14 @@ for s in samples:
             total_I = total_I + temp_total
             count = count + 1
 
-    replicate_output.to_excel(replicate_writer, sheet_name=s, index=False)
+    sheet_name = s
+    if len(sheet_name) > 30:
+        total_length = len(sheet_name)
+        start_idx = math.floor((total_length - 30)/2)
+        stop_idx = total_length - start_idx
+        sheet_name = sheet_name[start_idx:stop_idx]
+
+    replicate_output.to_excel(replicate_writer, sheet_name=sheet_name, index=False)
     graph_input.append(replicate_output)
 
     if len(replicate_output > 0):

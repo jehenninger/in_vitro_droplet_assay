@@ -38,3 +38,5 @@ Right now, I think I might have 'channels' hardcoded in the output. I may need t
 488 and 561, and in that particular order.
 
 @Bug There might be something wrong with the condensed fraction calculation. Need to check with more data and verify.
+
+Add better titles to droplet graphs

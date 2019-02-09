@@ -70,7 +70,6 @@ def analyze_replicate(metadata, input_args, output_dirs):
     channels = np.sort(channels)
 
     num_of_channels = len(channels)
-
     image_type = SimpleNamespace()
 
     if num_of_channels > 2:
@@ -90,6 +89,7 @@ def analyze_replicate(metadata, input_args, output_dirs):
                 sys.exit(0)
 
     bsub_flag = False
+    client_b_image_flag = False
     if input_args.b > 0.0:
         background_value_to_subtract = input_args.b
         bsub_flag = True
@@ -190,7 +190,9 @@ def analyze_replicate(metadata, input_args, output_dirs):
     # find std of image for later thresholding
     scaffold_std = np.std(scaffold)
     client_a_std = np.std(client_a)
-    client_b_std = np.std(client_b)
+
+    if client_b_image_flag:
+        client_b_std = np.std(client_b)
 
     threshold_multiplier = input_args.tm
 
@@ -268,7 +270,7 @@ def analyze_replicate(metadata, input_args, output_dirs):
 
             bulk_I = []
             bulk_I.append(np.mean(scaffold_random_average_image) * 65536)
-            total_I.append(np.sum(scaffold)) * 65536
+            total_I.append(np.sum(scaffold) * 65536)
 
         elif num_of_channels == 2:
             rand_client_a_storage = np.zeros(shape=(client_a.shape[0] * client_a.shape[1], num_of_iterations))
@@ -317,7 +319,7 @@ def analyze_replicate(metadata, input_args, output_dirs):
         total_I = []
         if num_of_channels == 1:
             bulk_I.append(np.mean(scaffold[bulk_mask]) * 65536)
-            total_I.append(np.sum(scaffold)) * 65536
+            total_I.append(np.sum(scaffold) * 65536)
         elif num_of_channels == 2:
             bulk_I.append(np.mean(client_a[bulk_mask]) * 65536)
             bulk_I.append(np.mean(client_b[bulk_mask]) * 65536)
@@ -337,13 +339,13 @@ def analyze_replicate(metadata, input_args, output_dirs):
         if num_of_channels == 1:
             replicate_output = replicate_output.append({'sample': s, 'replicate': r,
                                                         'droplet_id': 0,
-                                                        'subset_I_' + str(channels): 0.0,
-                                                        'mean_I_' + str(channels): 0.0,
-                                                        'max_I_' + str(channels): 0.0,
-                                                        'total_I_' + str(channels): 0.0,
-                                                        'bulk_I_' + str(channels): 0.0,
-                                                        'partition_ratio_' + str(channels): 0.0,
-                                                        'area': area, 'centroid_r': 0.0,
+                                                        'subset_I_' + str(channels[0]): 0.0,
+                                                        'mean_I_' + str(channels[0]): 0.0,
+                                                        'max_I_' + str(channels[0]): 0.0,
+                                                        'total_I_' + str(channels[0]): 0.0,
+                                                        'bulk_I_' + str(channels[0]): 0.0,
+                                                        'partition_ratio_' + str(channels[0]): 0.0,
+                                                        'area': 0.0, 'centroid_r': 0.0,
                                                         'centroid_c': 0.0,
                                                         'circularity': 0.0},
                                                        ignore_index=True)
@@ -402,29 +404,31 @@ def analyze_replicate(metadata, input_args, output_dirs):
                 droplet_id_centroid_c.append(centroid_c)
 
                 if num_of_channels == 1:
-                    mean_intensity = region.mean_intensity * 65536
-                    max_intensity = region.max_intensity * 65536
+                    # mean_intensity = region.mean_intensity * 65536
+                    mean_intensity = np.mean(client_a[coords_r, coords_c]) * 65536
+                    max_intensity = np.max(client_a[coords_r, coords_c]) * 65536
+                    # max_intensity = region.max_intensity * 65536
                     subset_intensity = np.mean(client_a[subset_coords_r, subset_coords_c]) * 65536
                     total_intensity = np.sum(client_a[coords_r, coords_c]) * 65536
 
                     if pr_parameter is 'sub':
-                        partition_ratio = subset_intensity/bulk_I
+                        partition_ratio = subset_intensity/bulk_I[0]
                     elif pr_parameter is 'mean':
-                        partition_ratio = mean_intensity/bulk_I
+                        partition_ratio = mean_intensity/bulk_I[0]
                     elif pr_parameter is 'max':
-                        partition_ratio = max_intensity/bulk_I
+                        partition_ratio = max_intensity/bulk_I[0]
                     else:
                         partition_ratio = -2  # just a sanity check. Should never happen.
 
 
                     replicate_output = replicate_output.append({'sample': s, 'replicate': r,
                                                                 'droplet_id': droplet_id,
-                                                                'subset_I_' + str(channels): subset_intensity,
-                                                                'mean_I_' + str(channels): mean_intensity,
-                                                                'max_I_' + str(channels): max_intensity,
-                                                                'total_I_' + str(channels): total_intensity,
-                                                                'bulk_I_' + str(channels): bulk_I,
-                                                                'partition_ratio_' + str(channels): partition_ratio,
+                                                                'subset_I_' + str(channels[0]): subset_intensity,
+                                                                'mean_I_' + str(channels[0]): mean_intensity,
+                                                                'max_I_' + str(channels[0]): max_intensity,
+                                                                'total_I_' + str(channels[0]): total_intensity,
+                                                                'bulk_I_' + str(channels[0]): bulk_I,
+                                                                'partition_ratio_' + str(channels[0]): partition_ratio,
                                                                 'area': area, 'centroid_r': centroid_r, 'centroid_c': centroid_c,
                                                                 'circularity': circularity},
                                                                ignore_index=True)
@@ -503,10 +507,10 @@ def analyze_sample(metadata, input_args, replicate_output, bulk_I, total_I):
 
     # initialize outputs
     if num_of_channels == 1:
-        sample_output = pd.DataFrame(columns=['sample', 'partition_ratio_mean_' + str(channels),
-                                              'partition_ratio_std_' + str(channels),
-                                              'condensed_fraction_mean_' + str(channels),
-                                              'condensed_fraction_std_' + str(channels)])
+        sample_output = pd.DataFrame(columns=['sample', 'partition_ratio_mean_' + str(channels[0]),
+                                              'partition_ratio_std_' + str(channels[0]),
+                                              'condensed_fraction_mean_' + str(channels[0]),
+                                              'condensed_fraction_std_' + str(channels[0])])
     elif num_of_channels == 2:
         sample_output = pd.DataFrame(columns=['sample', 'partition_ratio_mean_' + str(channels[0]),
                                               'partition_ratio_std_'            + str(channels[0]),
@@ -523,12 +527,12 @@ def analyze_sample(metadata, input_args, replicate_output, bulk_I, total_I):
         if num_of_channels == 1:
             for idx, r in enumerate(replicates):
                 mean_partition_ratio = np.mean(
-                    replicate_output['partition_ratio_' + str(channels)][replicate_output['replicate'] == r])
+                    replicate_output['partition_ratio_' + str(channels[0])][replicate_output['replicate'] == r])
 
                 replicate_partition_ratio.append(mean_partition_ratio)
 
                 condensed_fraction = np.sum(
-                    replicate_output['total_I_' + str(channels)][replicate_output['replicate'] == r])/total_I[idx]
+                    replicate_output['total_I_' + str(channels[0])][replicate_output['replicate'] == r])/total_I[idx]
 
                 replicate_condensed_fraction.append(condensed_fraction)
 
@@ -539,10 +543,10 @@ def analyze_sample(metadata, input_args, replicate_output, bulk_I, total_I):
             sample_condensed_fraction_std = np.std(replicate_condensed_fraction)
 
             sample_output = sample_output.append({'sample': sample_name,
-                                                  'partition_ratio_mean_' + str(channels): sample_partition_ratio_mean,
-                                                  'partition_ratio_std_' + str(channels): sample_partition_ratio_std,
-                                                  'condensed_fraction_mean_' + str(channels): sample_condensed_fraction_mean,
-                                                  'condensed_fraction_std_' + str(channels): sample_condensed_fraction_std},
+                                                  'partition_ratio_mean_' + str(channels[0]): sample_partition_ratio_mean,
+                                                  'partition_ratio_std_' + str(channels[0]): sample_partition_ratio_std,
+                                                  'condensed_fraction_mean_' + str(channels[0]): sample_condensed_fraction_mean,
+                                                  'condensed_fraction_std_' + str(channels[0]): sample_condensed_fraction_std},
                                                   ignore_index=True)
 
         elif num_of_channels == 2:
@@ -595,10 +599,10 @@ def analyze_sample(metadata, input_args, replicate_output, bulk_I, total_I):
     else:
         if num_of_channels == 1:
             sample_output = sample_output.append({'sample': sample_name,
-                                                  'partition_ratio_mean_' + str(channels): 0.0,
-                                                  'partition_ratio_std_' + str(channels): 0.0,
-                                                  'condensed_fraction_mean_' + str(channels): 0.0,
-                                                  'condensed_fraction_std_' + str(channels): 0.0},
+                                                  'partition_ratio_mean_' + str(channels[0]): 0.0,
+                                                  'partition_ratio_std_' + str(channels[0]): 0.0,
+                                                  'condensed_fraction_mean_' + str(channels[0]): 0.0,
+                                                  'condensed_fraction_std_' + str(channels[0]): 0.0},
                                                   ignore_index=True)
         elif num_of_channels == 2:
             sample_output = sample_output.append({'sample': sample_name,
