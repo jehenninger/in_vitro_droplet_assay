@@ -42,7 +42,7 @@ def make_droplet_boxplot(data, output_dirs, input_args):
         plt.tight_layout()
 
         plt.savefig(os.path.join(output_dirs['output_individual'], channel + '_droplet_boxplot.png'), dpi=300, format='png')
-        plt.savefig(os.path.join(output_dirs['output_individual'], channel + '_droplet_boxplot.eps'), format='eps')
+        plt.savefig(os.path.join(output_dirs['output_individual'], channel + '_droplet_boxplot.pdf'), format='pdf')
         plt.close()
 
 
@@ -59,8 +59,9 @@ def make_droplet_size_histogram(data, output_dirs, input_args):
     plt.xlabel('Droplet area')
     plt.axis('tight')
 
+    plt.tight_layout()
     plt.savefig(os.path.join(output_dirs['output_individual'], sample_name + '_droplet_size_histogram.png'), dpi=300, format='png')
-    plt.savefig(os.path.join(output_dirs['output_individual'], sample_name + '_droplet_size_histogram.eps'), format='eps')
+    plt.savefig(os.path.join(output_dirs['output_individual'], sample_name + '_droplet_size_histogram.pdf'), format='pdf')
     plt.close()
 
 
@@ -81,10 +82,12 @@ def make_droplet_intensity_scatter(data, output_dirs, input_args):
     plt.title(sample_name)
     plt.axis('tight')
 
+    plt.tight_layout()
+
     plt.savefig(os.path.join(output_dirs['output_individual'], sample_name + '_droplet_intensity_scatter.png'), dpi=300,
                 format='png')
-    plt.savefig(os.path.join(output_dirs['output_individual'], sample_name + '_droplet_intensity_scatter.eps'),
-                format='eps')
+    plt.savefig(os.path.join(output_dirs['output_individual'], sample_name + '_droplet_intensity_scatter.pdf'),
+                format='pdf')
     plt.close()
 
 def make_average_sample_graph(data, output_dirs, input_args):
@@ -105,11 +108,12 @@ def make_average_sample_graph(data, output_dirs, input_args):
         x_labels = data['sample'].tolist()
         plt.xticks(list(range(1, len(data.index)+1)), x_labels)
 
+        plt.tight_layout()
         plt.savefig(os.path.join(output_dirs['output_summary'], p + '_average.png'),
                     dpi=300,
                     format='png')
-        plt.savefig(os.path.join(output_dirs['output_summary'], p + '_average.eps'),
-                    format='eps')
+        plt.savefig(os.path.join(output_dirs['output_summary'], p + '_average.pdf'),
+                    format='pdf')
         plt.close()
 
     # condensed fraction graph
@@ -131,7 +135,7 @@ def make_average_sample_graph(data, output_dirs, input_args):
         plt.savefig(os.path.join(output_dirs['output_summary'], c + '_average.png'),
                     dpi=300,
                     format='png')
-        plt.savefig(os.path.join(output_dirs['output_summary'], c + '_average.eps'),
+        plt.savefig(os.path.join(output_dirs['output_summary'], c + '_average.pdf'),
                     format='eps')
         plt.close()
 

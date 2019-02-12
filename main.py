@@ -1,3 +1,13 @@
+#!/lab/solexa_young/scratch/jon_henninger/tools/venv/bin/python
+
+import matplotlib
+matplotlib.use('Agg')
+matplotlib.rcParams['pdf.fonttype'] = 42
+matplotlib.rcParams['ps.fonttype'] = 42
+matplotlib.rcParams['text.usetex'] = False
+matplotlib.rcParams['font.sans-serif'] = 'Arial'
+matplotlib.rcParams['font.family'] = 'sans-serif'
+
 import helper
 import grapher
 import pandas as pd
