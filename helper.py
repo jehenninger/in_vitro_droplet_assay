@@ -94,25 +94,7 @@ def analyze_replicate(metadata, input_args, output_dirs):
         background_value_to_subtract = input_args.b
         bsub_flag = True
 
-    if type(input_args.s) is int:
-        scaffold_channel_name = input_args.s
-        scaffold_test = [b == scaffold_channel_name for b in channels]
-
-        for idx, c in enumerate(channels):
-            if scaffold_test[idx]:
-                scaffold_image_path = metadata['image_path'][idx]
-                scaffold = io.imread(scaffold_image_path)
-                image_type.scaffold = scaffold.dtype
-                scaffold = img_as_float(scaffold)
-                client_a = scaffold
-                scaffold_image_flag = True
-            else:
-                client_b_image_path = metadata['image_path'][idx]
-                client_b = io.imread(client_b_image_path)
-                client_b = img_as_float(client_b)
-                client_b_image_flag = True
-
-    elif type(input_args.s) is str:
+    if type(input_args.s) is str:
         if input_args.s is 'avg':
             for idx, c in enumerate(channels):
                 count = 0
@@ -136,11 +118,34 @@ def analyze_replicate(metadata, input_args, output_dirs):
             scaffold = avg_image
 
             avg_image_flag = True
+        else:
+            scaffold_channel_name = int(input_args.s)
+            scaffold_test = [b == scaffold_channel_name for b in channels]
+
+            for idx, c in enumerate(channels):
+                if scaffold_test[idx]:
+                    scaffold_image_path = metadata['image_path'][idx]
+                    scaffold = io.imread(scaffold_image_path)
+                    image_type.scaffold = scaffold.dtype
+                    scaffold = img_as_float(scaffold)
+                    client_a = scaffold
+                    scaffold_image_flag = True
+                else:
+                    client_b_image_path = metadata['image_path'][idx]
+                    client_b = io.imread(client_b_image_path)
+                    client_b = img_as_float(client_b)
+                    client_b_image_flag = True
 
     else:
         print('ERROR: Could not identify scaffold parameter for replicate ', metadata['replicate'][0], ' in sample ', metadata['experiment_name'][0])
         sys.exit(0)
-
+    
+    try:
+        test = scaffold.shape[0]
+    except:
+        print('ERROR: Could not identify scaffold image')
+        sys.exit(0)
+    
     # make merged original image before processing
 
     if num_of_channels == 1:
@@ -237,10 +242,10 @@ def analyze_replicate(metadata, input_args, output_dirs):
     # what we want:
     # area, centroid, circularity, mean_intensity, max_intensity, mean intensity inside circle
     if num_of_channels == 1:
-        replicate_output = pd.DataFrame(columns=['sample', 'replicate', 'droplet_id', 'subset_I_'+str(channels),
-                                                 'mean_I_' + str(channels), 'max_I_' + str(channels),
-                                                 'total_I_' + str(channels),
-                                                 'bulk_I_' + str(channels), 'partition_ratio_' + str(channels),
+        replicate_output = pd.DataFrame(columns=['sample', 'replicate', 'droplet_id', 'subset_I_'+str(channels[0]),
+                                                 'mean_I_' + str(channels[0]), 'max_I_' + str(channels[0]),
+                                                 'total_I_' + str(channels[0]),
+                                                 'bulk_I_' + str(channels[0]), 'partition_ratio_' + str(channels[0]),
                                                  'area', 'centroid_r', 'centroid_c', 'circularity'])
     elif num_of_channels == 2:
         replicate_output = pd.DataFrame(columns=['sample', 'replicate', 'droplet_id',

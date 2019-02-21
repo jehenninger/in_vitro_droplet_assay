@@ -80,6 +80,7 @@ else:
     metadata = pd.DataFrame(columns=['image_path', 'experiment_name', 'replicate', 'channel_id'])
     # get number of experiments/sub-directories to analyze
     dir_list = os.listdir(input_args.metadata_path)
+    print(dir_list)
     dir_list.sort(reverse=False)
     file_ext = ".nd"
 
