@@ -1,3 +1,13 @@
+#!/usr/bin/env python3
+
+import matplotlib
+matplotlib.use('Agg')
+matplotlib.rcParams['pdf.fonttype'] = 42
+matplotlib.rcParams['ps.fonttype'] = 42
+matplotlib.rcParams['text.usetex'] = False
+matplotlib.rcParams['font.sans-serif'] = 'Arial'
+matplotlib.rcParams['font.family'] = 'sans-serif'
+
 import sys
 import os
 import json
@@ -5,8 +15,6 @@ from datetime import datetime
 import argparse
 import pandas as pd
 import numpy as np
-import matplotlib
-matplotlib.use('Agg')
 from matplotlib import pyplot as plt
 from scipy.optimize import curve_fit
 import re
@@ -87,7 +95,7 @@ def generate_graph(metadata_dir, output_dirs, input_args):
 
     data_file_list = [s for s in file_list if 'summary' in s]
 
-    data = pd.read_excel(os.path.join(metadata_dir, data_file_list[0]), sheet_name=3)  # fourth sheet because of Krishna's output
+    data = pd.read_excel(os.path.join(metadata_dir, data_file_list[0]), sheet_name='summary')
     sample_name = data_file_list[0].replace('summary_statistics_', '')
 
     plot_group = metadata['plot_group'].unique()
@@ -128,7 +136,8 @@ def generate_graph(metadata_dir, output_dirs, input_args):
                 popt, pcov = curve_fit(exponential_curve, x, y, p0=exponential_curve_param_guess)
 
                 # smooth curve and exponential fit
-                x_values = range(0, np.max(x), 5)
+                x_values = np.arange(0, np.max(x), 5)
+                # x_values = range(0, np.max(x), 5)
 
                 plt.plot(x_values, exponential_curve(x_values, *popt), line_color)
 
