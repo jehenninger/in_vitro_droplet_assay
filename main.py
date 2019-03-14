@@ -63,6 +63,7 @@ parser.add_argument('--no-meta', dest='metadata_flag', action='store_false', def
 
 
 input_args = parser.parse_args()
+input_args.metadata_path.replace("Volumes", "lab")  # this is specific to the wi-htdata directory. So that I don't have to replace "Volumes" all the time
 
 # load and check metadata
 # metadata_path = '/Users/jon/PycharmProjects/in_vitro_droplet_assay/test_MED_CTD/metadata.xlsx'
