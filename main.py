@@ -1,4 +1,4 @@
-#!/lab/solexa_young/scratch/jon_henninger/tools/venv/bin/python
+#!/Users/jon/PycharmProjects/in_vitro_droplet_assay/venv/bin/python
 
 import matplotlib
 matplotlib.use('Agg')
@@ -60,6 +60,7 @@ parser.add_argument('--no-image', dest='output_image_flag', action='store_false'
 parser.add_argument('--rand-bulk', dest='randomize_bulk_flag', action='store_true', default=False)  # flag to calculate bulk by randomzing the image 100 times and taking the average intensity
 parser.add_argument('--no-meta', dest='metadata_flag', action='store_false', default=True)  # flag to automatically parse experiment from folders instead of providing metadata.
 # parser.add_argument('--no-bsub', dest='bsub_flag', action='store_false', default=True)  # @Deprecated
+parser.add_argument('--bf', dest='bf_flag', action='store_true', default=False) # flag to include DIC brightfield as a scaffold
 
 
 input_args = parser.parse_args()
@@ -86,7 +87,6 @@ else:
     dir_list.sort(reverse=False)
     file_ext = ".nd"
 
-
     samples = []
     for folder in dir_list:
         if not folder.startswith('.') and not folder.endswith('output') and \
@@ -107,11 +107,12 @@ else:
                                    and os.path.isfile(os.path.join(input_args.metadata_path, folder, r))
                                    and file_ext not in r]
                 replicate_files = np.sort(replicate_files)
+
                 for rep in replicate_files:
                     metadata = metadata.append({'image_path' : rep,
                                                 'experiment_name' : folder,
                                                 'replicate' : count,
-                                                'channel_id' : int(helper.find_image_channel_name(rep))
+                                                'channel_id' : helper.find_image_channel_name(rep)
                                                 }, ignore_index=True)
                 count += 1
 

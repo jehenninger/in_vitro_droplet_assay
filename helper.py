@@ -13,6 +13,7 @@ from matplotlib import patches
 import argparse
 import json
 from datetime import datetime
+import cv2
 from types import SimpleNamespace
 
 circ = lambda r: (4 * math.pi * r.area) / (r.perimeter * r.perimeter)
@@ -94,58 +95,77 @@ def analyze_replicate(metadata, input_args, output_dirs):
         background_value_to_subtract = input_args.b
         bsub_flag = True
 
-    if type(input_args.s) is str:
-        if input_args.s is 'avg':
-            for idx, c in enumerate(channels):
-                count = 0
-                if idx == 0:
-                    avg_image = io.imread(metadata['image_path'][idx])
-                    image_type.scaffold = avg_image.dtype
-                    avg_image = img_as_float(avg_image)
-                    client_a = avg_image
-                    count = count + 1
-                else:
-                    image_to_add = io.imread(metadata['image_path'][idx])
-                    image_to_add = img_as_float(image_to_add)
-                    client_b = image_to_add
+    if input_args.bf_flag:
+        scaffold_channel_name = 0
+        scaffold_test = [b == scaffold_channel_name for b in channels]
 
-                    client_b_image_flag = True
-
-                    avg_image = avg_image + image_to_add
-                    count = count + 1
-
-            avg_image = avg_image/count
-            scaffold = avg_image
-
-            avg_image_flag = True
-        else:
-            scaffold_channel_name = int(input_args.s)
-            scaffold_test = [b == scaffold_channel_name for b in channels]
-
-            for idx, c in enumerate(channels):
-                if scaffold_test[idx]:
-                    scaffold_image_path = metadata['image_path'][idx]
-                    scaffold = io.imread(scaffold_image_path)
-                    image_type.scaffold = scaffold.dtype
-                    scaffold = img_as_float(scaffold)
-                    client_a = scaffold
-                    scaffold_image_flag = True
-                else:
-                    client_b_image_path = metadata['image_path'][idx]
-                    client_b = io.imread(client_b_image_path)
-                    client_b = img_as_float(client_b)
-                    client_b_image_flag = True
+        for idx, c in enumerate(channels):
+            if scaffold_test[idx]:
+                scaffold_image_path = metadata['image_path'][idx]
+                scaffold = io.imread(scaffold_image_path)
+                image_type.scaffold = scaffold.dtype
+                scaffold = img_as_float(scaffold)
+                client_a = scaffold
+                scaffold_image_flag = True
+            else:
+                client_b_image_path = metadata['image_path'][idx]
+                client_b = io.imread(client_b_image_path)
+                client_b = img_as_float(client_b)
+                client_b_image_flag = True
 
     else:
-        print('ERROR: Could not identify scaffold parameter for replicate ', metadata['replicate'][0], ' in sample ', metadata['experiment_name'][0])
-        sys.exit(0)
-    
+        if type(input_args.s) is str:
+            if input_args.s is 'avg':
+                for idx, c in enumerate(channels):
+                    count = 0
+                    if idx == 0:
+                        avg_image = io.imread(metadata['image_path'][idx])
+                        image_type.scaffold = avg_image.dtype
+                        avg_image = img_as_float(avg_image)
+                        client_a = avg_image
+                        count = count + 1
+                    else:
+                        image_to_add = io.imread(metadata['image_path'][idx])
+                        image_to_add = img_as_float(image_to_add)
+                        client_b = image_to_add
+
+                        client_b_image_flag = True
+
+                        avg_image = avg_image + image_to_add
+                        count = count + 1
+
+                avg_image = avg_image/count
+                scaffold = avg_image
+
+                avg_image_flag = True
+            else:
+                scaffold_channel_name = int(input_args.s)
+                scaffold_test = [b == scaffold_channel_name for b in channels]
+
+                for idx, c in enumerate(channels):
+                    if scaffold_test[idx]:
+                        scaffold_image_path = metadata['image_path'][idx]
+                        scaffold = io.imread(scaffold_image_path)
+                        image_type.scaffold = scaffold.dtype
+                        scaffold = img_as_float(scaffold)
+                        client_a = scaffold
+                        scaffold_image_flag = True
+                    else:
+                        client_b_image_path = metadata['image_path'][idx]
+                        client_b = io.imread(client_b_image_path)
+                        client_b = img_as_float(client_b)
+                        client_b_image_flag = True
+
+        else:
+            print('ERROR: Could not identify scaffold parameter for replicate ', metadata['replicate'][0], ' in sample ', metadata['experiment_name'][0])
+            sys.exit(0)
+
     try:
         test = scaffold.shape[0]
     except:
         print('ERROR: Could not identify scaffold image')
         sys.exit(0)
-    
+
     # make merged original image before processing
 
     if num_of_channels == 1:
@@ -192,6 +212,16 @@ def analyze_replicate(metadata, input_args, output_dirs):
             client_b = client_b - background_value_to_subtract
             client_b[client_b < 0] = 0
 
+    if input_args.bf_flag:
+
+        #process brightfield
+        median_img = img_as_uint(scaffold)
+        median_img = cv2.medianBlur(median_img, ksize=5)
+        median_img = img_as_float(median_img)
+
+        scaffold = scaffold - median_img
+        scaffold[np.where(scaffold < 0)] = 0
+
     # find std of image for later thresholding
     scaffold_std = np.std(scaffold)
     client_a_std = np.std(client_a)
@@ -214,7 +244,13 @@ def analyze_replicate(metadata, input_args, output_dirs):
     binary_mask[scaffold > (scaffold_mean + (threshold_multiplier * scaffold_std))] = True
     scaffold_binary[binary_mask] = True
 
-    scaffold_binary = ndi.morphology.binary_fill_holes(scaffold_binary)
+    if input_args.bf_flag:
+        scaffold_binary = ndi.morphology.binary_fill_holes(scaffold_binary)
+        scaffold_binary = ndi.morphology.binary_opening(scaffold_binary)
+        scaffold_binary = ndi.morphology.binary_dilation(scaffold_binary)
+    else:
+        scaffold_binary = ndi.morphology.binary_fill_holes(scaffold_binary)
+
     scaffold_binary_labeled = measure.label(scaffold_binary)
     scaffold_regionprops = measure.regionprops(scaffold_binary_labeled)
 
@@ -712,5 +748,10 @@ def make_droplet_image(output_path, orig_image, scaffold_image, label_image, num
 def find_image_channel_name(file_name):
     str_idx = file_name.find('Conf ')  # this is specific to our microscopes file name format
     channel_name = file_name[str_idx + 5 : str_idx + 8]
+
+    if channel_name == 'DIC':
+        channel_name = 0
+
+    channel_name = int(channel_name)
 
     return channel_name
