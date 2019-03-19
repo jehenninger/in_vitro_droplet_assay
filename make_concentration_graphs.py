@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+#!/lab/solexa_young/scratch/jon_henninger/tools/venv/bin/python
 
 import matplotlib
 matplotlib.use('Agg')
@@ -89,12 +89,12 @@ def generate_graph(metadata_dir, output_dirs, input_args):
     file_list = os.listdir(metadata_dir)
 
     # load metadata and parse data
-    metadata_file_list = [s for s in file_list if 'metadata' in s]  # metadata rows MUST MATCH summary rows
+    metadata_file_list = [s for s in file_list if 'metadata' in s and '$' not in s]  # metadata rows MUST MATCH summary rows
     metadata_file = metadata_file_list[0]
-    metadata = pd.read_excel(os.path.join(metadata_dir, metadata_file))
-
-    data_file_list = [s for s in file_list if 'summary' in s]
-
+    metadata = pd.read_excel(os.path.join(metadata_dir, metadata_file), sheet=0)
+   
+    data_file_list = [s for s in file_list if 'summary' in s and '$' not in s]
+    
     data = pd.read_excel(os.path.join(metadata_dir, data_file_list[0]), sheet_name='summary')
     sample_name = data_file_list[0].replace('summary_statistics_', '')
 
@@ -154,8 +154,8 @@ def generate_graph(metadata_dir, output_dirs, input_args):
         plt.xlabel(x_axis_label)
         plt.ylabel(column_to_plot)
 
-        plt.savefig(os.path.join(output_dirs[0], sample_name + '.eps'))
-        plt.savefig(os.path.join(output_dirs[0], sample_name + '.png'))
+        plt.savefig(os.path.join(output_dirs[0], sample_name + '.pdf'))
+        plt.savefig(os.path.join(output_dirs[0], sample_name + '.png'), dpi=300)
 
         output_params = {'metadata_folder': metadata_dir,
                          'time_of_analysis': datetime.now(),

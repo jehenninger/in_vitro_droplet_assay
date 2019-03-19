@@ -34,7 +34,7 @@ def make_droplet_boxplot(data, output_dirs, input_args):
 
         ax.boxplot(plot_data, labels=groups, showfliers=False)
 
-        plt.xticks(rotation=45)
+        plt.xticks(rotation=45, ha='right')
 
         plt.ylim(bottom=0)
         plt.ylabel(channel)
@@ -106,7 +106,7 @@ def make_average_sample_graph(data, output_dirs, input_args):
         # plt.ylim(bottom=1, top=math.floor(np.max(data[p]) + 1))
         plt.ylim(bottom=1)
         x_labels = data['sample'].tolist()
-        plt.xticks(list(range(1, len(data.index)+1)), x_labels)
+        plt.xticks(list(range(1, len(data.index)+1)), x_labels, rotation=45, ha='left')
 
         plt.tight_layout()
         plt.savefig(os.path.join(output_dirs['output_summary'], p + '_average.png'),

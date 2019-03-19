@@ -82,9 +82,9 @@ def analyze_replicate(metadata, input_args, output_dirs):
 
     # identify what value to use for [C](in) in partition ratio calculation
     pr_parameter = input_args.pr
-    if pr_parameter is not 'sub':
-        if pr_parameter is not 'mean':
-            if pr_parameter is not 'max':
+    if pr_parameter != 'sub':
+        if pr_parameter != 'mean':
+            if pr_parameter != 'max':
                 print('ERROR: Could not identify user input for value to use to calculate partition ratio')
                 sys.exit(0)
 
@@ -416,11 +416,11 @@ def analyze_replicate(metadata, input_args, output_dirs):
                     subset_intensity = np.mean(client_a[subset_coords_r, subset_coords_c]) * 65536
                     total_intensity = np.sum(client_a[coords_r, coords_c]) * 65536
 
-                    if pr_parameter is 'sub':
+                    if pr_parameter == 'sub':
                         partition_ratio = subset_intensity/bulk_I[0]
-                    elif pr_parameter is 'mean':
+                    elif pr_parameter == 'mean':
                         partition_ratio = mean_intensity/bulk_I[0]
-                    elif pr_parameter is 'max':
+                    elif pr_parameter == 'max':
                         partition_ratio = max_intensity/bulk_I[0]
                     else:
                         partition_ratio = -2  # just a sanity check. Should never happen.
@@ -432,7 +432,7 @@ def analyze_replicate(metadata, input_args, output_dirs):
                                                                 'mean_I_' + str(channels[0]): mean_intensity,
                                                                 'max_I_' + str(channels[0]): max_intensity,
                                                                 'total_I_' + str(channels[0]): total_intensity,
-                                                                'bulk_I_' + str(channels[0]): bulk_I,
+                                                                'bulk_I_' + str(channels[0]): bulk_I[0],
                                                                 'partition_ratio_' + str(channels[0]): partition_ratio,
                                                                 'area': area, 'centroid_r': centroid_r, 'centroid_c': centroid_c,
                                                                 'circularity': circularity},
@@ -451,13 +451,13 @@ def analyze_replicate(metadata, input_args, output_dirs):
                     total_intensity_a = np.sum(client_a[coords_r, coords_c]) * 65536
                     total_intensity_b = np.sum(client_b[coords_r, coords_c]) * 65536
 
-                    if pr_parameter is 'sub':
+                    if pr_parameter == 'sub':
                         partition_ratio_a = subset_intensity_a/bulk_I[0]
                         partition_ratio_b = subset_intensity_b/bulk_I[1]
-                    elif pr_parameter is 'mean':
+                    elif pr_parameter == 'mean':
                         partition_ratio_a = mean_intensity_a / bulk_I[0]
                         partition_ratio_b = mean_intensity_b / bulk_I[1]
-                    elif pr_parameter is 'max':
+                    elif pr_parameter == 'max':
                         partition_ratio_a = max_intensity_a / bulk_I[0]
                         partition_ratio_b = max_intensity_b / bulk_I[1]
 

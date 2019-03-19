@@ -40,7 +40,7 @@ from skimage import io, filters, measure, color, exposure, morphology, feature, 
 
 # parse input
 parser = argparse.ArgumentParser()
-parser.add_argument("metadata_path")
+parser.add_argument("metadata_path", type=str)
 parser.add_argument("--o", type=str)  # optional output directory name
 parser.add_argument("--tm", type=float, default=3.0)  # optional threshold multiplier. Defaults to 3. Multiplies std plus background peak
 parser.add_argument("--r", type=float, default=9.0)  # area of subset circle to use in middle of droplet
@@ -63,7 +63,8 @@ parser.add_argument('--no-meta', dest='metadata_flag', action='store_false', def
 
 
 input_args = parser.parse_args()
-input_args.metadata_path.replace("Volumes", "lab")  # this is specific to the wi-htdata directory. So that I don't have to replace "Volumes" all the time
+
+input_args.metadata_path = input_args.metadata_path.replace("Volumes", "lab")  # this is specific to the wi-htdata directory. So that I don't have to replace "Volumes" all the time
 
 # load and check metadata
 # metadata_path = '/Users/jon/PycharmProjects/in_vitro_droplet_assay/test_MED_CTD/metadata.xlsx'
