@@ -16,26 +16,101 @@ from datetime import datetime
 import cv2
 from types import SimpleNamespace
 
-circ = lambda r: (4 * math.pi * r.area) / (r.perimeter * r.perimeter)
 
-# def read_metadata(input_args, metadata_path):
-def read_metadata(input_args):
 
-    metadata_path = input_args.metadata_path
+def parse_arguments(parser):
 
-    metadata_dir = os.path.dirname(metadata_path)
-    metadata_name = os.path.splitext(metadata_path)[0]
-    metadata_name = os.path.basename(metadata_name)
+    # required arguments
+    parser.add_argument('parent_path', type=str,
+                        help='Full path to folder that contains subfolders of experiments with data')
+    parser.add_argument('output_path', type=str,
+                        help='Full path to folder where you want the output to be stored. The folder will be made if it does not exist')
 
-    if not os.path.isdir(metadata_dir) or not os.path.isfile(metadata_path):
-        print('ERROR: Could not read or find  metadata file')
+    # optional arguments
+    parser.add_argument("--tm", type=float, default=3.0,
+                        help='Optional threshold multiplier. Defaults to 3. mean + std*tm')
+    parser.add_argument("--r", type=float, default=30,
+                        help='Area of subset circle to use in middle of droplet. Default 30 px^2. Per droplet, --min_a supercedes --r')
+    parser.add_argument("--min_a", type=float, default=20,
+                        help='Optional threshold for minimum droplet area. Default 20 px^2')
+    parser.add_argument("--max_a", type=float, default=500,
+                        help='Optional threshold for max droplet area. Default is 500 px^2')
+    parser.add_argument("--circ", type=float, default=0.8,
+                        help='Optional threshold for droplet circularity (defined 0.0-1.0). Default is 0.8')
+    parser.add_argument("--s",
+                        help='What channel to use for scaffolding. Defaults to standardized average of all channels.')
+    parser.add_argument("--b", type=float, default=0.0,
+                        help='Optional absolute value to use to subtract background. Default is 0.0.')
+    parser.add_argument("--pr", type=str, default='subset',
+                        help='Value to use for [C](in) to calculate partition ratio. Options are subset, mean, and max. Default is subset')
+    parser.add_argument('--crop', type=int,
+                        help='Width from center point to include in pixels. Defaults to entire image (width/2)')
+    parser.add_argument('--no-image', dest='output_image_flag', action='store_false', default=True,
+                        help='Flag to set if you do not want output images of the droplets saved to the output directory')
+    parser.add_argument('--rand-bulk', dest='randomize_bulk_flag', action='store_true', default=False,
+                        help='Flag to calculate bulk by randomzing the image and taking the average intensity. NOT YET IMPLEMENTED')
+    parser.add_argument('--bf', dest='bf_flag', action='store_true', default=False,
+                        help='Flag to include DIC brightfield as the scaffold')
+
+    input_params = parser.parse_args()
+
+    return input_params
+
+
+def load_images(replicate_files, input_params, parent_path):
+    data = SimpleNamespace()  # this is the session data object that will be passed to functions. Corresponds to one replicate
+
+    # get replicate sample name
+    nd_file_name = [n for n in replicate_files if '.nd' in n]
+    if len(nd_file_name) == 1:
+        sample_name = get_sample_name(nd_file_name[0])
+        data.sample_name = sample_name
+    else:
+        print('Error: Found too many .nd files in sample directory')
         sys.exit(0)
 
-    output_dirs = make_output_directories(metadata_dir, metadata_name, input_args)
+    print(sample_name)
 
-    metadata = pd.read_excel(metadata_path)
+    # load images
+    nucleus_image_file = [f for f in replicate_files if all(['405 DAPI' in f, get_file_extension(f) == '.TIF'])]
+    if len(nucleus_image_file) < 1:
+        print('Error: Could not find nucleus image file')
+        sys.exit(0)
 
-    return metadata, output_dirs
+    nucleus_image_path = os.path.join(input_params.parent_dir, parent_dir, nucleus_image_file[0])
+    nucleus_image = io.volread(nucleus_image_path)  # image is [z, x, y] array
+    data.nucleus_image = nucleus_image
+
+    fish_image_file = [s for s in replicate_files if input_params.fish_channel in s and get_file_extension(s) == '.TIF']
+    if len(fish_image_file) < 1:
+        print('Error: Could not find fish image file')
+        sys.exit(0)
+
+    fish_image_path = os.path.join(input_params.parent_dir, parent_dir, fish_image_file[0])
+    fish_image = io.volread(fish_image_path)
+    data.fish_image = fish_image
+
+    protein_image_files = [p for p in replicate_files if
+                           all(['405 DAPI' not in p,
+                                input_params.fish_channel not in p,
+                                get_file_extension(p) == '.TIF'])]
+    if len(protein_image_files) < 1:
+        print('Error: Could not find protein image files')
+        sys.exit(0)
+
+    protein_image_paths = []
+    protein_images = []
+    protein_channel_names = []
+    for idx, p in enumerate(protein_image_files):
+        protein_image_paths.append(os.path.join(input_params.parent_dir, parent_dir, p))
+        protein_channel_names.append(find_image_channel_name(p))
+        protein_images.append(io.volread(protein_image_paths[idx]))
+
+    data.protein_images = protein_images
+    data.protein_channel_names = protein_channel_names
+
+    return data
+
 
 def make_output_directories(metadata_dir, metadata_name, input_args):
     if input_args.o:
@@ -755,3 +830,15 @@ def find_image_channel_name(file_name):
     channel_name = int(channel_name)
 
     return channel_name
+
+
+def circ(r):
+    output = (4 * math.pi * r.area) / (r.perimeter * r.perimeter)
+
+    return output
+
+
+def get_sample_name(nd_file_name):
+    sample_name, ext = os.path.splitext(nd_file_name)
+
+    return sample_name

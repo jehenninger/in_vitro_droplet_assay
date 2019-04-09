@@ -8,8 +8,8 @@ matplotlib.rcParams['text.usetex'] = False
 matplotlib.rcParams['font.sans-serif'] = 'Arial'
 matplotlib.rcParams['font.family'] = 'sans-serif'
 
-import helper
-import grapher
+import in_vitro_droplet_assay.methods as methods
+import in_vitro_droplet_assay.grapher as grapher
 import pandas as pd
 import numpy as np
 import os
@@ -25,51 +25,14 @@ from datetime import datetime
 from skimage import io, filters, measure, color, exposure, morphology, feature, img_as_float, img_as_uint
 
 
-# metadata has the following columns:
-#
-# image_path : full paths to every channel image
-#
-# experiment_name : unique name for each sample/experiment.
-# items with the same experiment_name will be grouped together
-# as replicates
-#
-# replicate : integer number corresponding to the replicate
-#
-# channel_id : integer number corresponding to the channel (488,561,642).
-# this will be used if the scaffold parameter is set
+# This is written so that all replicates for a given experiment are in a folder together (both .TIF and .nd files)
 
 # parse input
 parser = argparse.ArgumentParser()
-parser.add_argument("metadata_path", type=str)
-parser.add_argument("--o", type=str)  # optional output directory name
-parser.add_argument("--tm", type=float, default=3.0)  # optional threshold multiplier. Defaults to 3. Multiplies std plus background peak
-parser.add_argument("--r", type=float, default=9.0)  # area of subset circle to use in middle of droplet
-parser.add_argument("--min_a", type=float, default=9)  # optional threshold for minimum droplet area @Temporary
-parser.add_argument("--max_a", type=float, default=500)  # optional threshold for max droplet area
-parser.add_argument("--circ", type=float, default=0.8)  # optional threshold for droplet circularity
-parser.add_argument("--s", default='avg')  # what channel to use for scaffolding. Defaults to average.
-parser.add_argument("--b", type=float, default=0.0)  # background subtraction
-parser.add_argument("--pr", type=str, default='sub')  # Value to use for [C](in) to calculate partition ratio.
-    # Options: 'sub' for subset circle, 'mean' for mean intensity of whole droplet, 'max' for max intensity in droplet
 
-# parser.add_argument("--s", default=561) # @Temporary
-parser.add_argument('--crop', type=int)  # width from center point to include in pixels.
-                                         # Defaults to entire image (width/2)
-
-parser.add_argument('--no-image', dest='output_image_flag', action='store_false', default=True)  # flag to set whether output images of the droplets are saved to a directory
-parser.add_argument('--rand-bulk', dest='randomize_bulk_flag', action='store_true', default=False)  # flag to calculate bulk by randomzing the image 100 times and taking the average intensity
-parser.add_argument('--no-meta', dest='metadata_flag', action='store_false', default=True)  # flag to automatically parse experiment from folders instead of providing metadata.
-# parser.add_argument('--no-bsub', dest='bsub_flag', action='store_false', default=True)  # @Deprecated
-parser.add_argument('--bf', dest='bf_flag', action='store_true', default=False) # flag to include DIC brightfield as a scaffold
-
-
-input_args = parser.parse_args()
-
-input_args.metadata_path = input_args.metadata_path.replace("Volumes", "lab")  # this is specific to the wi-htdata directory. So that I don't have to replace "Volumes" all the time
-
-# load and check metadata
-# metadata_path = '/Users/jon/PycharmProjects/in_vitro_droplet_assay/test_MED_CTD/metadata.xlsx'
-# metadata, output_dirs = helper.read_metadata(input_args, metadata_path)  # @Temporary
+input_params = methods.parse_arguments(parser)
+input_params.parent_dir = input_params.parent_dir.replace("Volumes","lab")
+input_params.output_path = input_params.output_path.replace("Volumes","lab")
 
 if input_args.metadata_flag:
     metadata, output_dirs = helper.read_metadata(input_args)
