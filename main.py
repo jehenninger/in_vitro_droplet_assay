@@ -34,57 +34,47 @@ input_params = methods.parse_arguments(parser)
 input_params.parent_dir = input_params.parent_dir.replace("Volumes","lab")
 input_params.output_path = input_params.output_path.replace("Volumes","lab")
 
-if input_args.metadata_flag:
-    metadata, output_dirs = helper.read_metadata(input_args)
-    # get number of unique experiments
-    samples = np.unique(metadata['experiment_name'])
-    num_of_samples = len(samples)
+input_params = methods.make_output_directories(input_params)
 
-    channels = np.unique(metadata['channel_id'])
-    num_of_channels = len(channels)
-else:
-    metadata = pd.DataFrame(columns=['image_path', 'experiment_name', 'replicate', 'channel_id'])
-    # get number of experiments/sub-directories to analyze
-    dir_list = os.listdir(input_args.metadata_path)
-    print(dir_list)
-    dir_list.sort(reverse=False)
-    file_ext = ".nd"
+# get number of experiments/sub-directories to analyze
+dir_list = os.listdir(input_params.parent_path)
+dir_list.sort(reverse=False)
+file_ext = ".nd"
 
-    samples = []
-    for folder in dir_list:
-        if not folder.startswith('.') and not folder.endswith('output') and \
-            os.path.isdir(os.path.join(input_args.metadata_path, folder)):
+samples = []
+# this loops over EXPERIMENT FOLDERS
+for folder in dir_list:
+    if not folder.startswith('.') and os.path.isdir(os.path.join(input_params.parent_path, folder)):
+        print()
+        print(f'Sample: {folder}')
 
-            samples.append(folder)
-            file_list = os.listdir(os.path.join(input_args.metadata_path, folder))
+        file_list = os.listdir(os.path.join(input_params.parent_path, folder))
 
-            base_name_files = [f for f in file_list if file_ext in f
-                               and os.path.isfile(os.path.join(input_args.metadata_path, folder, f))]
+        base_name_files = [f for f in file_list if file_ext in f
+                           and os.path.isfile(os.path.join(input_params.parent_path, folder, f))]
 
-            base_name_files.sort(reverse=False)
+        base_name_files.sort(reverse=False)
 
-            count = 1
-            for idx, file in enumerate(base_name_files):
-                sample_name = file.replace(file_ext, '')
-                replicate_files = [os.path.join(input_args.metadata_path, folder, r) for r in file_list if sample_name in r
-                                   and os.path.isfile(os.path.join(input_args.metadata_path, folder, r))
-                                   and file_ext not in r]
-                replicate_files = np.sort(replicate_files)
+        rep_count = 1
 
-                for rep in replicate_files:
-                    metadata = metadata.append({'image_path' : rep,
-                                                'experiment_name' : folder,
-                                                'replicate' : count,
-                                                'channel_id' : helper.find_image_channel_name(rep)
-                                                }, ignore_index=True)
-                count += 1
+        replicate_writer = pd.ExcelWriter(
+            os.path.join(input_params.output_dirs['output_individual'], 'individual_droplet_output.xlsx'),
+            engine='xlsxwriter')
 
-            num_of_channels = len(replicate_files)
+        # this loops over REPLICATES
+        for idx, file in enumerate(base_name_files):
+            sample_name = file.replace(file_ext, '')
+            replicate_files = [os.path.join(input_params.parent_path, folder, r) for r in file_list if sample_name in r
+                               and os.path.isfile(os.path.join(input_params.parent_path, folder, r))
+                               and file_ext not in r]
 
-    output_dirs = helper.make_output_directories(input_args.metadata_path, 'metadata', input_args)
+            replicate_files = np.sort(replicate_files)
 
-replicate_writer = pd.ExcelWriter(os.path.join(output_dirs['output_individual'], 'individual_droplet_output.xlsx'),
-                                  engine='xlsxwriter')
+            data = methods.load_images(replicate_files, input_params, folder)
+
+            temp_rep, temp_bulk, temp_total = methods.analyze_replicate(data, input_params)
+
+
 
 sample_writer = pd.ExcelWriter(os.path.join(output_dirs['output_summary'], 'summary_droplet_output.xlsx'),
                                   engine='xlsxwriter')

@@ -57,7 +57,7 @@ def parse_arguments(parser):
     return input_params
 
 
-def load_images(replicate_files, input_params, parent_path):
+def load_images(replicate_files, input_params, folder):
     data = SimpleNamespace()  # this is the session data object that will be passed to functions. Corresponds to one replicate
 
     # get replicate sample name
@@ -72,53 +72,29 @@ def load_images(replicate_files, input_params, parent_path):
     print(sample_name)
 
     # load images
-    nucleus_image_file = [f for f in replicate_files if all(['405 DAPI' in f, get_file_extension(f) == '.TIF'])]
-    if len(nucleus_image_file) < 1:
-        print('Error: Could not find nucleus image file')
+    channel_image_files = [c for c in replicate_files if get_file_extension(c) == '.TIF']
+
+    if len(channel_image_files) < 1:
+        print('Error: Could not find image files')
         sys.exit(0)
 
-    nucleus_image_path = os.path.join(input_params.parent_dir, parent_dir, nucleus_image_file[0])
-    nucleus_image = io.volread(nucleus_image_path)  # image is [z, x, y] array
-    data.nucleus_image = nucleus_image
+    channel_image_paths = []
+    channel_images = []
+    channel_names = []
+    for idx, p in enumerate(channel_image_files):
+        channel_image_paths.append(os.path.join(input_params.parent_path, folder, p))
+        channel_names.append(find_image_channel_name(p))
+        channel_images.append(img_as_float(io.imread(channel_image_paths[idx])))
 
-    fish_image_file = [s for s in replicate_files if input_params.fish_channel in s and get_file_extension(s) == '.TIF']
-    if len(fish_image_file) < 1:
-        print('Error: Could not find fish image file')
-        sys.exit(0)
-
-    fish_image_path = os.path.join(input_params.parent_dir, parent_dir, fish_image_file[0])
-    fish_image = io.volread(fish_image_path)
-    data.fish_image = fish_image
-
-    protein_image_files = [p for p in replicate_files if
-                           all(['405 DAPI' not in p,
-                                input_params.fish_channel not in p,
-                                get_file_extension(p) == '.TIF'])]
-    if len(protein_image_files) < 1:
-        print('Error: Could not find protein image files')
-        sys.exit(0)
-
-    protein_image_paths = []
-    protein_images = []
-    protein_channel_names = []
-    for idx, p in enumerate(protein_image_files):
-        protein_image_paths.append(os.path.join(input_params.parent_dir, parent_dir, p))
-        protein_channel_names.append(find_image_channel_name(p))
-        protein_images.append(io.volread(protein_image_paths[idx]))
-
-    data.protein_images = protein_images
-    data.protein_channel_names = protein_channel_names
+    data.channel_images = channel_images
+    data.channel_names = channel_names
 
     return data
 
 
-def make_output_directories(metadata_dir, metadata_name, input_args):
-    if input_args.o:
-        output_parent_dir = os.path.join(metadata_dir, input_args.o)
-        # output_dirs.append(os.path.join(metadata_dir, input_args.o))
-    else:
-        output_parent_dir = os.path.join(metadata_dir, metadata_name + '_output')
-        # output_dirs.append(os.path.join(metadata_dir, metadata_name + '_output'))
+def make_output_directories(input_params):
+
+    output_parent_dir = input_params.output_path
 
     output_dirs = {'output_parent': output_parent_dir,
                    'output_individual': os.path.join(output_parent_dir, 'individual'),
@@ -137,109 +113,48 @@ def make_output_directories(metadata_dir, metadata_name, input_args):
 
                 os.mkdir(folder)
 
-    return output_dirs
+    input_params.output_dirs = output_dirs
 
-def analyze_replicate(metadata, input_args, output_dirs):
-    sample_name = np.unique(metadata['experiment_name'])[0]
-    replicate_name = np.unique(metadata['replicate'])[0]
-    channels = np.unique(metadata['channel_id'])
-    channels = np.sort(channels)
+    return input_params
 
-    num_of_channels = len(channels)
-    image_type = SimpleNamespace()
 
-    if num_of_channels > 2:
-        print('ERROR: Currently can only do up to 2 channels')
-        sys.exit(0)
+def find_scaffold(data, input_params):
 
-    scaffold_image_flag = False
-    client_image_flag = False
-    avg_image_flag = False
+    num_of_channels = len(data.channel_names)
 
     # identify what value to use for [C](in) in partition ratio calculation
-    pr_parameter = input_args.pr
-    if pr_parameter != 'sub':
+    pr_parameter = input_params.pr
+    if pr_parameter != 'subset':
         if pr_parameter != 'mean':
             if pr_parameter != 'max':
                 print('ERROR: Could not identify user input for value to use to calculate partition ratio')
                 sys.exit(0)
 
-    bsub_flag = False
-    client_b_image_flag = False
-    if input_args.b > 0.0:
-        background_value_to_subtract = input_args.b
-        bsub_flag = True
+    if input_params.bf_flag:  # if you want to use BF as the scaffold
+        scaffold_channel_name = 'chDIC'
+        scaffold_test = [b == scaffold_channel_name for b in data.channel_names]
 
-    if input_args.bf_flag:
-        scaffold_channel_name = 0
-        scaffold_test = [b == scaffold_channel_name for b in channels]
-
-        for idx, c in enumerate(channels):
+        for idx, c in enumerate(data.channel_names):
             if scaffold_test[idx]:
-                scaffold_image_path = metadata['image_path'][idx]
-                scaffold = io.imread(scaffold_image_path)
-                image_type.scaffold = scaffold.dtype
-                scaffold = img_as_float(scaffold)
-                client_a = scaffold
-                scaffold_image_flag = True
-            else:
-                client_b_image_path = metadata['image_path'][idx]
-                client_b = io.imread(client_b_image_path)
-                client_b = img_as_float(client_b)
-                client_b_image_flag = True
-
+                scaffold = data.channel_images[idx]
+                scaffold = standardize_img(scaffold)
     else:
-        if type(input_args.s) is str:
-            if input_args.s is 'avg':
-                for idx, c in enumerate(channels):
-                    count = 0
-                    if idx == 0:
-                        avg_image = io.imread(metadata['image_path'][idx])
-                        image_type.scaffold = avg_image.dtype
-                        avg_image = img_as_float(avg_image)
-                        client_a = avg_image
-                        count = count + 1
-                    else:
-                        image_to_add = io.imread(metadata['image_path'][idx])
-                        image_to_add = img_as_float(image_to_add)
-                        client_b = image_to_add
+        if input_params.s:  # when the user specifies a scaffold channel
+            scaffold_channel_name = 'ch' + input_params.s
+            scaffold_test = [b == scaffold_channel_name for b in data.channel_names]
 
-                        client_b_image_flag = True
+            for idx, c in enumerate(data.channel_names):
+                if scaffold_test[idx]:
+                    scaffold = data.channel_images[idx]
+                    scaffold = standardize_img(scaffold)
 
-                        avg_image = avg_image + image_to_add
-                        count = count + 1
+        else:  # default using the average scaffold
+            scaffold = np.zeros(shape=data.channel_images[0].shape, dtype=np.float)
 
-                avg_image = avg_image/count
-                scaffold = avg_image
+            for img in data.channel_images:
+                scaffold = scaffold + img/num_of_channels
 
-                avg_image_flag = True
-            else:
-                scaffold_channel_name = int(input_args.s)
-                scaffold_test = [b == scaffold_channel_name for b in channels]
-
-                for idx, c in enumerate(channels):
-                    if scaffold_test[idx]:
-                        scaffold_image_path = metadata['image_path'][idx]
-                        scaffold = io.imread(scaffold_image_path)
-                        image_type.scaffold = scaffold.dtype
-                        scaffold = img_as_float(scaffold)
-                        client_a = scaffold
-                        scaffold_image_flag = True
-                    else:
-                        client_b_image_path = metadata['image_path'][idx]
-                        client_b = io.imread(client_b_image_path)
-                        client_b = img_as_float(client_b)
-                        client_b_image_flag = True
-
-        else:
-            print('ERROR: Could not identify scaffold parameter for replicate ', metadata['replicate'][0], ' in sample ', metadata['experiment_name'][0])
-            sys.exit(0)
-
-    try:
-        test = scaffold.shape[0]
-    except:
-        print('ERROR: Could not identify scaffold image')
-        sys.exit(0)
+        ## JON START HERE
 
     # make merged original image before processing
 
@@ -824,10 +739,7 @@ def find_image_channel_name(file_name):
     str_idx = file_name.find('Conf ')  # this is specific to our microscopes file name format
     channel_name = file_name[str_idx + 5 : str_idx + 8]
 
-    if channel_name == 'DIC':
-        channel_name = 0
-
-    channel_name = int(channel_name)
+    channel_name = 'ch' + channel_name
 
     return channel_name
 
@@ -842,3 +754,16 @@ def get_sample_name(nd_file_name):
     sample_name, ext = os.path.splitext(nd_file_name)
 
     return sample_name
+
+def get_file_extension(file_path):
+    file_ext = os.path.splitext(file_path)
+
+    return file_ext[1]  # because splitext returns a tuple, and the extension is the second element
+
+
+def standardize_img(img):
+    mean = np.mean(img)
+    std = np.std(img)
+    img = (img - mean) / std
+
+    return img
