@@ -69,6 +69,8 @@ def make_droplet_intensity_scatter(data, output_dirs, input_args):
     # for now, we only support this feature for 2 channels because it will be hard-coded
     mean_intensity_cols = [col for col in data.columns if 'mean' in col]
 
+    ## Jon start here. Need to find all pairwise combos of the channels and then make a scatter for each pair.
+
     channel_a = data[mean_intensity_cols[0]]
     channel_b = data[mean_intensity_cols[1]]
 

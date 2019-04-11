@@ -22,8 +22,13 @@ import math
 import argparse
 import json
 from datetime import datetime
+from types import SimpleNamespace
 from skimage import io, filters, measure, color, exposure, morphology, feature, img_as_float, img_as_uint
 
+#TODO Implement watershed algorithm on the droplets
+#TODO correct for uneven illumination
+#TODO Better background subtraction that isn't just a straight value
+#TODO Better [Cout] by averaging randomized images
 
 # This is written so that all replicates for a given experiment are in a folder together (both .TIF and .nd files)
 
@@ -43,6 +48,8 @@ file_ext = ".nd"
 
 samples = []
 # this loops over EXPERIMENT FOLDERS
+sample_writer = pd.ExcelWriter(os.path.join(input_params.output_dirs['output_summary'], 'summary_droplet_output.xlsx'),
+                                  engine='xlsxwriter')
 for folder in dir_list:
     if not folder.startswith('.') and os.path.isdir(os.path.join(input_params.parent_path, folder)):
         print()
@@ -62,6 +69,12 @@ for folder in dir_list:
             engine='xlsxwriter')
 
         # this loops over REPLICATES
+        bulk_I = []
+        total_I = []
+        data = SimpleNamespace()  # this is the session data object that will be passed to functions. Corresponds to one replicate
+        data.replicate_output = pd.DataFrame()
+
+        input_params.replicate_count = 1
         for idx, file in enumerate(base_name_files):
             sample_name = file.replace(file_ext, '')
             replicate_files = [os.path.join(input_params.parent_path, folder, r) for r in file_list if sample_name in r
@@ -70,75 +83,40 @@ for folder in dir_list:
 
             replicate_files = np.sort(replicate_files)
 
-            data = methods.load_images(replicate_files, input_params, folder)
+            data = methods.load_images(replicate_files, data, input_params, folder)
 
-            temp_rep, temp_bulk, temp_total = methods.analyze_replicate(data, input_params)
+            data = methods.find_scaffold(data, input_params)
+            data = methods.find_droplets(data, input_params)
+            bulk_I.append(data.bulk_I)
+            total_I.append(data.total_I)
 
+            input_params.replicate_count += 1
 
+        sheet_name = folder
+        if len(sheet_name) > 30:
+            total_length = len(sheet_name)
+            start_idx = math.floor((total_length - 30)/2)
+            stop_idx = total_length - start_idx
+            sheet_name = sheet_name[start_idx:stop_idx]
 
-sample_writer = pd.ExcelWriter(os.path.join(output_dirs['output_summary'], 'summary_droplet_output.xlsx'),
-                                  engine='xlsxwriter')
+        data.replicate_output.to_excel(replicate_writer, sheet_name=sheet_name, index=False)
 
-graph_input = list()
+        if len(data.replicate_output) > 0:
+            grapher.make_droplet_size_histogram(data.replicate_output, input_params.output_dirs, input_params)
 
-sample_count = 0
-for s in samples:
-    print()
-    print("Sample: ", s)
+            if len(data.channel_names) > 1:
+                grapher.make_droplet_intensity_scatter(data.replicate_output, input_params.output_dirs, input_params)
 
-    metadata_sample = metadata[(metadata['experiment_name'] == s)].copy()
-    metadata_sample = metadata_sample.reset_index(drop=True)
+        temp_sample_output = helper.analyze_sample(metadata_sample, input_args, replicate_output, bulk_I, total_I)
 
-    # get number of replicates
-    replicates = np.unique(metadata_sample['replicate'])
-    num_of_replicates = len(replicates)
-
-    count = 0
-    for r in replicates:
-        # print('replicate: ', r)
-
-        metadata_replicate = metadata_sample[metadata_sample['replicate'] == r].copy()
-        metadata_replicate = metadata_replicate.reset_index(drop=True)
-
-        temp_rep, temp_bulk, temp_total = helper.analyze_replicate(metadata_replicate, input_args, output_dirs)
-
-        if count == 0:
-            replicate_output = temp_rep.copy()
-            bulk_I = temp_bulk
-            total_I = temp_total
-            count = count + 1
+        if sample_count == 0:
+            sample_output = temp_sample_output.copy()
+            sample_count = sample_count + 1
         else:
-            replicate_output = replicate_output.append(temp_rep, ignore_index=True)
-            bulk_I = bulk_I + temp_bulk
-            total_I = total_I + temp_total
-            count = count + 1
+            sample_output = sample_output.append(temp_sample_output, ignore_index=True)
+            sample_count = sample_count + 1
 
-    sheet_name = s
-    if len(sheet_name) > 30:
-        total_length = len(sheet_name)
-        start_idx = math.floor((total_length - 30)/2)
-        stop_idx = total_length - start_idx
-        sheet_name = sheet_name[start_idx:stop_idx]
-
-    replicate_output.to_excel(replicate_writer, sheet_name=sheet_name, index=False)
-    graph_input.append(replicate_output)
-
-    if len(replicate_output > 0):
-        grapher.make_droplet_size_histogram(replicate_output, output_dirs, input_args)
-
-        if num_of_channels == 2:
-            grapher.make_droplet_intensity_scatter(replicate_output, output_dirs, input_args)
-
-    temp_sample_output = helper.analyze_sample(metadata_sample, input_args, replicate_output, bulk_I, total_I)
-
-    if sample_count == 0:
-        sample_output = temp_sample_output.copy()
-        sample_count = sample_count + 1
-    else:
-        sample_output = sample_output.append(temp_sample_output, ignore_index=True)
-        sample_count = sample_count + 1
-
-    print('Finished at: ', datetime.now())
+        print(f'Finished sample {folder} at {datetime.now()}')
 
 
 sample_output.to_excel(sample_writer, sheet_name='summary', index=False)

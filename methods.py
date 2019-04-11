@@ -43,8 +43,6 @@ def parse_arguments(parser):
                         help='Optional absolute value to use to subtract background. Default is 0.0.')
     parser.add_argument("--pr", type=str, default='subset',
                         help='Value to use for [C](in) to calculate partition ratio. Options are subset, mean, and max. Default is subset')
-    parser.add_argument('--crop', type=int,
-                        help='Width from center point to include in pixels. Defaults to entire image (width/2)')
     parser.add_argument('--no-image', dest='output_image_flag', action='store_false', default=True,
                         help='Flag to set if you do not want output images of the droplets saved to the output directory')
     parser.add_argument('--rand-bulk', dest='randomize_bulk_flag', action='store_true', default=False,
@@ -57,9 +55,7 @@ def parse_arguments(parser):
     return input_params
 
 
-def load_images(replicate_files, input_params, folder):
-    data = SimpleNamespace()  # this is the session data object that will be passed to functions. Corresponds to one replicate
-
+def load_images(replicate_files, data, input_params, folder):
     # get replicate sample name
     nd_file_name = [n for n in replicate_files if '.nd' in n]
     if len(nd_file_name) == 1:
@@ -119,7 +115,8 @@ def make_output_directories(input_params):
 
 
 def find_scaffold(data, input_params):
-
+    scaffold = np.zeros(shape=data.channel_images[0].shape, dtype=np.float)
+    scaffold = scaffold - input_params.b
     num_of_channels = len(data.channel_names)
 
     # identify what value to use for [C](in) in partition ratio calculation
@@ -136,7 +133,13 @@ def find_scaffold(data, input_params):
 
         for idx, c in enumerate(data.channel_names):
             if scaffold_test[idx]:
-                scaffold = data.channel_images[idx]
+                scaffold = scaffold + data.channel_images[idx]
+                if input_params.b > 0.0:
+                    print('Error: Cannot do background subtract on brightfield image')
+                    sys.exit(0)
+
+                scaffold = modify_bf_img(scaffold)
+                data.scaffold_output_img = scaffold
                 scaffold = standardize_img(scaffold)
     else:
         if input_params.s:  # when the user specifies a scaffold channel
@@ -145,96 +148,52 @@ def find_scaffold(data, input_params):
 
             for idx, c in enumerate(data.channel_names):
                 if scaffold_test[idx]:
-                    scaffold = data.channel_images[idx]
+                    scaffold = scaffold + data.channel_images[idx]
+                    scaffold[np.where(scaffold < 0)] = 0  # to correct for background subtraction
+                    data.scaffold_output_img = scaffold
                     scaffold = standardize_img(scaffold)
 
         else:  # default using the average scaffold
-            scaffold = np.zeros(shape=data.channel_images[0].shape, dtype=np.float)
 
             for img in data.channel_images:
                 scaffold = scaffold + img/num_of_channels
 
-        ## JON START HERE
+            scaffold[np.where(scaffold < 0)] = 0  # to correct for background subtraction
+            data.scaffold_output_img = scaffold
+            scaffold = standardize_img(scaffold)
 
-    # make merged original image before processing
+    data.scaffold = scaffold
 
-    if num_of_channels == 1:
-        orig_image = client_a
-    elif num_of_channels == 2:
-        orig_image = np.zeros(shape=(scaffold.shape[0], scaffold.shape[0], 3))
-        # we will assume that first channel is green and second channel is magenta
-        orig_image[..., 0] = client_b  # R
-        orig_image[..., 1] = client_a  # G
-        orig_image[..., 2] = client_b  # B
+    return data
 
-    #  define crop region
-    crop_mask = np.full(shape=(scaffold.shape[0], scaffold.shape[1]), fill_value=False, dtype=bool)
 
-    if input_args.crop:
-        c_width = int(input_args.crop)
-        center_coord = int(scaffold.shape[0]/2)
-        crop_mask[center_coord-c_width:center_coord+c_width, center_coord-c_width:center_coord+c_width] = True
-        crop_shape = (int(2*c_width), int(2*c_width))
-    else:
-        crop_mask.fill(True)
-        crop_shape = scaffold.shape
+def modify_bf_img(img):
+    #process brightfield image that should already be type float
+    median_img = img_as_uint(img)
+    median_img = cv2.medianBlur(median_img, ksize=5)
+    median_img = img_as_float(median_img)
 
-    scaffold = scaffold[crop_mask].reshape(crop_shape)
-    client_a = client_a[crop_mask].reshape(crop_shape)
+    img = img - median_img
+    img[np.where(img < 0)] = 0
 
-    if client_b_image_flag:
-        client_b = client_b[crop_mask].reshape(crop_shape)
+    return img
 
-    # background subtraction
-    if bsub_flag:
-        if image_type.scaffold.name == 'uint16':
-            background_value_to_subtract = background_value_to_subtract/65536
-        elif image_type.scaffold.name == 'uint8':
-            background_value_to_subtract = background_value_to_subtract/256
 
-        scaffold = scaffold - background_value_to_subtract
-        scaffold[scaffold < 0] = 0
+def find_droplets(data, input_params):
+    threshold_multiplier = input_params.tm
+    scaffold = data.scaffold
+    channels = data.channel_names
 
-        client_a = client_a - background_value_to_subtract
-        client_a[client_a < 0] = 0
-
-        if client_b_image_flag:
-            client_b = client_b - background_value_to_subtract
-            client_b[client_b < 0] = 0
-
-    if input_args.bf_flag:
-
-        #process brightfield
-        median_img = img_as_uint(scaffold)
-        median_img = cv2.medianBlur(median_img, ksize=5)
-        median_img = img_as_float(median_img)
-
-        scaffold = scaffold - median_img
-        scaffold[np.where(scaffold < 0)] = 0
-
-    # find std of image for later thresholding
-    scaffold_std = np.std(scaffold)
-    client_a_std = np.std(client_a)
-
-    if client_b_image_flag:
-        client_b_std = np.std(client_b)
-
-    threshold_multiplier = input_args.tm
-
-    # make binary image of scaffold with threshold intensity. Threshold is multiplier of std above background
-
-    scaffold_mean = np.mean(scaffold)
-    client_a_mean = np.mean(client_a)
-    if client_b_image_flag:
-        client_b_mean = np.mean(client_b)
+    # make binary image of scaffold with threshold intensity. Threshold is multiplier of std above background.
+    # Since we have already standardized the image, the threshold is simply the value of the image.
 
     binary_mask = np.full(shape=(scaffold.shape[0], scaffold.shape[1]), fill_value=False, dtype=bool)
     scaffold_binary = np.full(shape=(scaffold.shape[0], scaffold.shape[1]), fill_value= False, dtype=bool)
 
-    binary_mask[scaffold > (scaffold_mean + (threshold_multiplier * scaffold_std))] = True
+    binary_mask[scaffold > threshold_multiplier] = True
     scaffold_binary[binary_mask] = True
 
-    if input_args.bf_flag:
+    if input_params.bf_flag:
         scaffold_binary = ndi.morphology.binary_fill_holes(scaffold_binary)
         scaffold_binary = ndi.morphology.binary_opening(scaffold_binary)
         scaffold_binary = ndi.morphology.binary_dilation(scaffold_binary)
@@ -245,10 +204,10 @@ def find_scaffold(data, input_params):
     scaffold_regionprops = measure.regionprops(scaffold_binary_labeled)
 
     # filter droplets by size and circularity
-    min_area_threshold = input_args.min_a
-    max_area_threshold = input_args.max_a
-    circ_threshold = input_args.circ
-    subset_area = input_args.r
+    min_area_threshold = input_params.min_a
+    max_area_threshold = input_params.max_a
+    circ_threshold = input_params.circ
+    subset_area = input_params.r
 
     subset_area_less_than_min_area_flag = False
     if subset_area < min_area_threshold:
@@ -264,98 +223,84 @@ def find_scaffold(data, input_params):
     scaffold_filtered_binary_labeled = measure.label(scaffold_mask)
     scaffold_filtered_regionprops = measure.regionprops(scaffold_filtered_binary_labeled)
 
+
+
+    # get measurements of bulk regions excluding droplets and total intensity of entire image (including droplets)
+    # Not implemented yet
+    if input_params.randomize_bulk_flag:
+        print('Randomized bulk not implemented yet')
+        sys.exit(0)
+
+        # num_of_iterations = 100
+        #
+        # total_I = []
+        #
+        # if num_of_channels == 1:
+        #     rand_scaffold_storage = np.zeros(shape=(scaffold.shape[0] * scaffold.shape[1], num_of_iterations))
+        #
+        #     scaffold_1d = np.reshape(scaffold, (scaffold.shape[0] * scaffold.shape[1]))
+        #
+        #     for n in range(num_of_iterations):
+        #         rand_scaffold_storage[:,n] = np.random.shuffle(scaffold_1d)
+        #
+        #     scaffold_random_average_image = np.reshape(np.mean(rand_scaffold_storage, axis=1), shape=scaffold.shape)
+        #
+        #     bulk_I = []
+        #     bulk_I.append(np.mean(scaffold_random_average_image) * 65536)
+        #     total_I.append(np.sum(scaffold) * 65536)
+        #
+        # elif num_of_channels == 2:
+        #     rand_client_a_storage = np.zeros(shape=(client_a.shape[0] * client_a.shape[1], num_of_iterations))
+        #     rand_client_b_storage = np.zeros(shape=(client_b.shape[0] * client_b.shape[1], num_of_iterations))
+        #
+        #     # doc on shuffle: multi-dimensional arrays are only shuffled along the first axis
+        #     # so let's make the image an array of (N) instead of (m,n)
+        #     client_a_1d = np.reshape(client_a, (client_a.shape[0] * client_a.shape[1]))
+        #     client_b_1d = np.reshape(client_b, (client_b.shape[0] * client_b.shape[1]))
+        #
+        #     rand_client_a_sum = np.zeros(shape=(1, client_a.shape[0] * client_a.shape[1]))
+        #     rand_client_b_sum = np.zeros(shape=(1, client_b.shape[0] * client_b.shape[1]))
+        #     for n in range(num_of_iterations):
+        #         # rand_client_a_storage[n,:] = np.random.shuffle(client_a_1d)
+        #         # rand_client_b_storage[n,:] = np.random.shuffle(client_b_1d)
+        #         np.random.shuffle(client_a_1d)
+        #         np.random.shuffle(client_b_1d)
+        #         rand_client_a_sum = rand_client_a_sum + client_a_1d
+        #         rand_client_b_sum = rand_client_b_sum + client_b_1d
+        #
+        #     # client_a_random_average_image = np.reshape(np.mean(rand_client_a_storage, axis=1), client_a.shape)
+        #     client_a_random_average_image = np.reshape(rand_client_a_sum/num_of_iterations, client_a.shape)
+        #     client_b_random_average_image = np.reshape(rand_client_b_sum/num_of_iterations, client_b.shape)
+        #
+        #     # client_b_random_average_image = np.reshape(np.mean(rand_client_b_storage, axis=1), client_b.shape)
+        #
+        #     bulk_I = []
+        #     bulk_I.append(np.mean(client_a_random_average_image) * 65536)
+        #     bulk_I.append(np.mean(client_b_random_average_image) * 65536)
+        #
+        #     total_I.append(np.sum(client_a) * 65536)
+        #     total_I.append(np.sum(client_b) * 65536)
+        #
+        # if num_of_channels == 1:
+        #     random_bulk_image = client_a_random_average_image
+        # elif num_of_channels == 2:
+        #     random_bulk_image = np.zeros(shape=(scaffold.shape[0], scaffold.shape[0], 3))
+        #     # we will assume that first channel is green and second channel is magenta
+        #     random_bulk_image[..., 0] = client_b_random_average_image  # R
+        #     random_bulk_image[..., 1] = client_a_random_average_image  # G
+        #     random_bulk_image[..., 2] = client_b_random_average_image  # B
+    else:
+        bulk_mask = np.invert(scaffold_mask)
+        bulk_I = np.zeros(len(channels))
+        total_I = np.zeros(len(channels))
+
+        for idx, c in enumerate(channels):
+            bulk_I[idx] = np.mean(scaffold[bulk_mask]) * 65536
+            total_I[idx] = np.sum(scaffold) * 65536
+
     # get measurements of regions from centered circle with radius sqrt(minimum droplet area)
     # what we want:
     # area, centroid, circularity, mean_intensity, max_intensity, mean intensity inside circle
-    if num_of_channels == 1:
-        replicate_output = pd.DataFrame(columns=['sample', 'replicate', 'droplet_id', 'subset_I_'+str(channels[0]),
-                                                 'mean_I_' + str(channels[0]), 'max_I_' + str(channels[0]),
-                                                 'total_I_' + str(channels[0]),
-                                                 'bulk_I_' + str(channels[0]), 'partition_ratio_' + str(channels[0]),
-                                                 'area', 'centroid_r', 'centroid_c', 'circularity'])
-    elif num_of_channels == 2:
-        replicate_output = pd.DataFrame(columns=['sample', 'replicate', 'droplet_id',
-                                                 'subset_I_'+str(channels[0]), 'subset_I_'+str(channels[1]),
-                                                 'mean_I_' + str(channels[0]), 'mean_I_' + str(channels[1]),
-                                                 'max_I_' + str(channels[0]), 'max_I_' + str(channels[1]),
-                                                 'total_I_' + str(channels[0]), 'total_I_' + str(channels[1]),
-                                                 'bulk_I_' + str(channels[0]), 'bulk_I_' + str(channels[1]),
-                                                 'partition_ratio_' + str(channels[0]), 'partition_ratio_' + str(channels[1]),
-                                                 'area', 'centroid_r', 'centroid_c', 'circularity'])
-
-    # get measurements of bulk regions excluding droplets and total intensity of entire image (including droplets)
-    if input_args.randomize_bulk_flag:
-        num_of_iterations = 100
-
-        total_I = []
-
-        if num_of_channels == 1:
-            rand_scaffold_storage = np.zeros(shape=(scaffold.shape[0] * scaffold.shape[1], num_of_iterations))
-
-            scaffold_1d = np.reshape(scaffold, (scaffold.shape[0] * scaffold.shape[1]))
-
-            for n in range(num_of_iterations):
-                rand_scaffold_storage[:,n] = np.random.shuffle(scaffold_1d)
-
-            scaffold_random_average_image = np.reshape(np.mean(rand_scaffold_storage, axis=1), shape=scaffold.shape)
-
-            bulk_I = []
-            bulk_I.append(np.mean(scaffold_random_average_image) * 65536)
-            total_I.append(np.sum(scaffold) * 65536)
-
-        elif num_of_channels == 2:
-            rand_client_a_storage = np.zeros(shape=(client_a.shape[0] * client_a.shape[1], num_of_iterations))
-            rand_client_b_storage = np.zeros(shape=(client_b.shape[0] * client_b.shape[1], num_of_iterations))
-
-            # doc on shuffle: multi-dimensional arrays are only shuffled along the first axis
-            # so let's make the image an array of (N) instead of (m,n)
-            client_a_1d = np.reshape(client_a, (client_a.shape[0] * client_a.shape[1]))
-            client_b_1d = np.reshape(client_b, (client_b.shape[0] * client_b.shape[1]))
-
-            rand_client_a_sum = np.zeros(shape=(1, client_a.shape[0] * client_a.shape[1]))
-            rand_client_b_sum = np.zeros(shape=(1, client_b.shape[0] * client_b.shape[1]))
-            for n in range(num_of_iterations):
-                # rand_client_a_storage[n,:] = np.random.shuffle(client_a_1d)
-                # rand_client_b_storage[n,:] = np.random.shuffle(client_b_1d)
-                np.random.shuffle(client_a_1d)
-                np.random.shuffle(client_b_1d)
-                rand_client_a_sum = rand_client_a_sum + client_a_1d
-                rand_client_b_sum = rand_client_b_sum + client_b_1d
-
-            # client_a_random_average_image = np.reshape(np.mean(rand_client_a_storage, axis=1), client_a.shape)
-            client_a_random_average_image = np.reshape(rand_client_a_sum/num_of_iterations, client_a.shape)
-            client_b_random_average_image = np.reshape(rand_client_b_sum/num_of_iterations, client_b.shape)
-
-            # client_b_random_average_image = np.reshape(np.mean(rand_client_b_storage, axis=1), client_b.shape)
-
-            bulk_I = []
-            bulk_I.append(np.mean(client_a_random_average_image) * 65536)
-            bulk_I.append(np.mean(client_b_random_average_image) * 65536)
-
-            total_I.append(np.sum(client_a) * 65536)
-            total_I.append(np.sum(client_b) * 65536)
-
-        if num_of_channels == 1:
-            random_bulk_image = client_a_random_average_image
-        elif num_of_channels == 2:
-            random_bulk_image = np.zeros(shape=(scaffold.shape[0], scaffold.shape[0], 3))
-            # we will assume that first channel is green and second channel is magenta
-            random_bulk_image[..., 0] = client_b_random_average_image  # R
-            random_bulk_image[..., 1] = client_a_random_average_image  # G
-            random_bulk_image[..., 2] = client_b_random_average_image  # B
-
-    else:
-        bulk_mask = np.invert(scaffold_mask)
-        bulk_I = []
-        total_I = []
-        if num_of_channels == 1:
-            bulk_I.append(np.mean(scaffold[bulk_mask]) * 65536)
-            total_I.append(np.sum(scaffold) * 65536)
-        elif num_of_channels == 2:
-            bulk_I.append(np.mean(client_a[bulk_mask]) * 65536)
-            bulk_I.append(np.mean(client_b[bulk_mask]) * 65536)
-            total_I.append(np.sum(client_a) * 65536)
-            total_I.append(np.sum(client_b) * 65536)
 
     # initialize labeled image to generate output of what droplets were called
     label_image = np.full(shape=(scaffold.shape[0], scaffold.shape[1]), fill_value=False, dtype=bool)
@@ -364,46 +309,12 @@ def find_scaffold(data, input_params):
     droplet_id_centroid_c = []
 
     # iterate over regions to collect information on individual droplets
-    s = sample_name
-    r = replicate_name
-    if len(scaffold_filtered_regionprops) < 1:
-        if num_of_channels == 1:
-            replicate_output = replicate_output.append({'sample': s, 'replicate': r,
-                                                        'droplet_id': 0,
-                                                        'subset_I_' + str(channels[0]): 0.0,
-                                                        'mean_I_' + str(channels[0]): 0.0,
-                                                        'max_I_' + str(channels[0]): 0.0,
-                                                        'total_I_' + str(channels[0]): 0.0,
-                                                        'bulk_I_' + str(channels[0]): 0.0,
-                                                        'partition_ratio_' + str(channels[0]): 0.0,
-                                                        'area': 0.0, 'centroid_r': 0.0,
-                                                        'centroid_c': 0.0,
-                                                        'circularity': 0.0},
-                                                       ignore_index=True)
-        elif num_of_channels == 2:
-            replicate_output = replicate_output.append({'sample': s, 'replicate': r, 'droplet_id': 0,
-                                                        'subset_I_' + str(channels[0]): 0.0,
-                                                        'subset_I_' + str(channels[1]): 0.0,
-                                                        'mean_I_' + str(channels[0]): 0.0,
-                                                        'mean_I_' + str(channels[1]): 0.0,
-                                                        'max_I_' + str(channels[0]): 0.0,
-                                                        'max_I_' + str(channels[1]): 0.0,
-                                                        'total_I_' + str(channels[0]): 0.0,
-                                                        'total_I_' + str(channels[1]): 0.0,
-                                                        'bulk_I_' + str(channels[0]): 0.0,
-                                                        'bulk_I_' + str(channels[1]): 0.0,
-                                                        'partition_ratio_' + str(channels[0]): 0.0,
-                                                        'partition_ratio_' + str(channels[1]): 0.0,
-                                                        'area': 0.0, 'centroid_r': 0.0,
-                                                        'centroid_c': 0.0,
-                                                        'circularity': 0.0},
-                                                       ignore_index=True)
+    s = data.sample_name
+    r = input_params.replicate_count
 
-    else:
+    if len(scaffold_filtered_regionprops) > 0:
         for i, region in enumerate(scaffold_filtered_regionprops):
-
             area = region.area
-
             use_min_area_flag = False  # this is if the subset area is less than the min droplet area parameter. In this case, we just use the min area.
             if subset_area_less_than_min_area_flag:
                 if area < subset_area:
@@ -434,88 +345,67 @@ def find_scaffold(data, input_params):
                 droplet_id_centroid_r.append(centroid_r)
                 droplet_id_centroid_c.append(centroid_c)
 
-                if num_of_channels == 1:
-                    # mean_intensity = region.mean_intensity * 65536
-                    mean_intensity = np.mean(client_a[coords_r, coords_c]) * 65536
-                    max_intensity = np.max(client_a[coords_r, coords_c]) * 65536
-                    # max_intensity = region.max_intensity * 65536
-                    subset_intensity = np.mean(client_a[subset_coords_r, subset_coords_c]) * 65536
-                    total_intensity = np.sum(client_a[coords_r, coords_c]) * 65536
+                for c_idx, img in enumerate(data.channel_images):
+                    mean_intensity = np.mean(img[coords_r, coords_c]) * 65536
+                    max_intensity = np.max(img[coords_r, coords_c]) * 65536
 
-                    if pr_parameter == 'sub':
+                    subset_intensity = np.mean(img[subset_coords_r, subset_coords_c]) * 65536
+                    total_intensity = np.sum(img[coords_r, coords_c]) * 65536
+
+                    if input_params.pr == 'sub':
                         partition_ratio = subset_intensity/bulk_I[0]
-                    elif pr_parameter == 'mean':
+                    elif input_params.pr == 'mean':
                         partition_ratio = mean_intensity/bulk_I[0]
-                    elif pr_parameter == 'max':
+                    elif input_params.pr== 'max':
                         partition_ratio = max_intensity/bulk_I[0]
                     else:
                         partition_ratio = -2  # just a sanity check. Should never happen.
 
+                    replicate_output = pd.concat(replicate_output,
+                                                 pd.DataFrame({'sample': s, 'replicate': r,
+                                                               'droplet_id': droplet_id,
+                                                               'subset_I_' + str(channels[c_idx]): subset_intensity,
+                                                               'mean_I_' + str(channels[c_idx]): mean_intensity,
+                                                               'max_I_' + str(channels[c_idx]): max_intensity,
+                                                               'total_I_' + str(channels[c_idx]): total_intensity,
+                                                               'bulk_I_' + str(channels[c_idx]): bulk_I[c_idx],
+                                                               'partition_ratio_' + str(channels[c_idx]): partition_ratio,
+                                                               'area': area, 'centroid_r': centroid_r, 'centroid_c': centroid_c,
+                                                               'circularity': circularity}),
+                                                 sort=False)
 
-                    replicate_output = replicate_output.append({'sample': s, 'replicate': r,
-                                                                'droplet_id': droplet_id,
-                                                                'subset_I_' + str(channels[0]): subset_intensity,
-                                                                'mean_I_' + str(channels[0]): mean_intensity,
-                                                                'max_I_' + str(channels[0]): max_intensity,
-                                                                'total_I_' + str(channels[0]): total_intensity,
-                                                                'bulk_I_' + str(channels[0]): bulk_I[0],
-                                                                'partition_ratio_' + str(channels[0]): partition_ratio,
-                                                                'area': area, 'centroid_r': centroid_r, 'centroid_c': centroid_c,
-                                                                'circularity': circularity},
-                                                               ignore_index=True)
 
-                elif num_of_channels == 2:
-                    mean_intensity_a = np.mean(client_a[coords_r, coords_c]) * 65536
-                    mean_intensity_b = np.mean(client_b[coords_r, coords_c]) * 65536
+    else:
+        for c in channels:
+            replicate_output = pd.concat(replicate_output, pd.DataFrame({'sample': s, 'replicate': r,
+                                                        'droplet_id': 0,
+                                                        'subset_I_' + str(c): 0.0,
+                                                        'mean_I_' + str(c): 0.0,
+                                                        'max_I_' + str(c): 0.0,
+                                                        'total_I_' + str(c): 0.0,
+                                                        'bulk_I_' + str(c): 0.0,
+                                                        'partition_ratio_' + str(c): 0.0,
+                                                        'area': 0.0, 'centroid_r': 0.0,
+                                                        'centroid_c': 0.0,
+                                                        'circularity': 0.0}),
+                                                       sort=False)
 
-                    max_intensity_a = np.max(client_a[coords_r, coords_c]) * 65536
-                    max_intensity_b = np.max(client_b[coords_r, coords_c]) * 65536
+    data.label_image = label_image
+    data.replicate_output = replicate_output
+    data.bulk_I = bulk_I
+    data.total_I = total_I
 
-                    subset_intensity_a = np.mean(client_a[subset_coords_r, subset_coords_c]) * 65536
-                    subset_intensity_b = np.mean(client_b[subset_coords_r, subset_coords_c]) * 65536
-
-                    total_intensity_a = np.sum(client_a[coords_r, coords_c]) * 65536
-                    total_intensity_b = np.sum(client_b[coords_r, coords_c]) * 65536
-
-                    if pr_parameter == 'sub':
-                        partition_ratio_a = subset_intensity_a/bulk_I[0]
-                        partition_ratio_b = subset_intensity_b/bulk_I[1]
-                    elif pr_parameter == 'mean':
-                        partition_ratio_a = mean_intensity_a / bulk_I[0]
-                        partition_ratio_b = mean_intensity_b / bulk_I[1]
-                    elif pr_parameter == 'max':
-                        partition_ratio_a = max_intensity_a / bulk_I[0]
-                        partition_ratio_b = max_intensity_b / bulk_I[1]
-
-                    replicate_output = replicate_output.append({'sample': s, 'replicate': r, 'droplet_id': droplet_id,
-                                                                'subset_I_'+str(channels[0]): subset_intensity_a,
-                                                                'subset_I_'+str(channels[1]): subset_intensity_b,
-                                                                'mean_I_' + str(channels[0]): mean_intensity_a,
-                                                                'mean_I_' + str(channels[1]): mean_intensity_b,
-                                                                'max_I_' + str(channels[0]): max_intensity_a,
-                                                                'max_I_' + str(channels[1]): max_intensity_b,
-                                                                'total_I_' + str(channels[0]): total_intensity_a,
-                                                                'total_I_' + str(channels[1]): total_intensity_b,
-                                                                'bulk_I_' + str(channels[0]): bulk_I[0],
-                                                                'bulk_I_' + str(channels[1]): bulk_I[1],
-                                                                'partition_ratio_' + str(channels[0]): partition_ratio_a,
-                                                                'partition_ratio_' + str(channels[1]): partition_ratio_b,
-                                                                'area': area, 'centroid_r': centroid_r, 'centroid_c': centroid_c,
-                                                                'circularity': circularity},
-                                                               ignore_index=True)
-
-    if input_args.output_image_flag:
-        if input_args.randomize_bulk_flag:
-            make_droplet_image(output_dirs['output_individual_images'], orig_image, scaffold, label_image,
-                               num_of_channels, str(s) + '_' + str(r), droplet_id_list, droplet_id_centroid_c, droplet_id_centroid_r,
-                               input_args, random_bulk_image=random_bulk_image)
+    if input_params.output_image_flag:
+        if input_params.randomize_bulk_flag:
+            pass
+            # make_droplet_image(output_dirs['output_individual_images'], orig_image, scaffold, label_image,
+            #                    num_of_channels, str(s) + '_' + str(r), droplet_id_list, droplet_id_centroid_c, droplet_id_centroid_r,
+            #                    input_args, random_bulk_image=random_bulk_image)
         else:
-            make_droplet_image(output_dirs['output_individual_images'], orig_image, scaffold, label_image,
-                               num_of_channels, str(s) + '_' + str(r), droplet_id_list, droplet_id_centroid_c,
-                               droplet_id_centroid_r,
-                               input_args)
+            make_droplet_image(input_params.output_dirs['output_individual_images'], data, droplet_id_list, droplet_id_centroid_r,
+                               droplet_id_centroid_c, input_params)
 
-    return replicate_output, bulk_I, total_I
+    return data
 
 
 def subtract_background(input_image):
@@ -669,71 +559,53 @@ def make_axes_blank(ax):
     ax.get_yaxis().set_ticks([])
 
 
-def make_droplet_image(output_path, orig_image, scaffold_image, label_image, num_of_channels, name,
-                       droplet_list, droplet_r, droplet_c, input_args, random_bulk_image=None):
+def make_droplet_image(output_path, data, droplet_list, droplet_r, droplet_c, input_params):
 
-    fig, ax = plt.subplots(nrows=1, ncols=2)
-    orig_image = exposure.rescale_intensity(orig_image)
-    scaffold_image = exposure.rescale_intensity(scaffold_image)
+    fig, ax = plt.subplot(figsize=(3, 3))
+    scaffold_image = exposure.rescale_intensity(data.scaffold_output_image)
 
-    label = np.zeros(shape=label_image.shape)
-    label[label_image] = 1
-
-    # label_image[label_image is True] = 1
-
-    if num_of_channels == 1:
-        ax[0].imshow(orig_image, cmap='gray')
-    elif num_of_channels == 2:
-        ax[0].imshow(orig_image)
-
-    if input_args.crop:
-        crop_x_left = int(orig_image.shape[0]/2) - int(input_args.crop)
-        crop_y_bottom = crop_x_left
-        crop_width = 2*input_args.crop
-
-        crop_region = patches.Rectangle(xy=(crop_x_left, crop_y_bottom), width=crop_width, height=crop_width,
-                                        fill=False, color='y', linewidth=2.0)
-        ax[0].add_patch(crop_region)
-
-    ax[0].set_title(name)
-    make_axes_blank(ax[0])
+    label = np.zeros(shape=data.label_image.shape)
+    label[data.label_image] = 1
 
     region_overlay = color.label2rgb(label, image=scaffold_image,
                                      alpha=0.5, image_alpha=1, bg_label=0, bg_color=None)
 
-    ax[1].imshow(region_overlay)
+    ax.imshow(region_overlay)
+
+    ax.set_title(data.sample_name + '_rep' + str(input_params.replicate_count))
+    make_axes_blank(ax)
 
     text_offset = 10
     droplet_r = [(int(round(r)) + text_offset) for r in droplet_r]
     droplet_c = [(int(round(c)) + text_offset) for c in droplet_c]
 
     for i, drop_id in enumerate(droplet_list):
-        ax[1].text(droplet_r[i], droplet_c[i], drop_id, color='w', fontsize=4)
+        ax.text(droplet_r[i], droplet_c[i], drop_id, color='w', fontsize=4)
 
-    make_axes_blank(ax[1])
-
-    plt.savefig(os.path.join(output_path, name + '.png'), dpi=300)
+    plt.savefig(os.path.join(output_path, data.sample_name + '_rep' + str(input_params.replicate_count) + '.png'), dpi=300)
     plt.close()
 
-    if random_bulk_image is not None:
-        fig, ax = plt.subplots(nrows=1, ncols=2)
-        orig_image = exposure.rescale_intensity(orig_image)
-        random_bulk_image = exposure.rescale_intensity(random_bulk_image)
+    #
+    # if random_bulk_image is not None:
+    #     fig, ax = plt.subplots(nrows=1, ncols=2)
+    #     orig_image = exposure.rescale_intensity(orig_image)
+    #     random_bulk_image = exposure.rescale_intensity(random_bulk_image)
+    #
+    #     if num_of_channels == 1:
+    #         ax[0].imshow(orig_image, cmap='gray')
+    #         ax[1].imshow(random_bulk_image, cmap='gray')
+    #     elif num_of_channels == 2:
+    #         ax[0].imshow(orig_image)
+    #         ax[1].imshow(random_bulk_image)
+    #
+    #     ax[0].set_title(name)
+    #     ax[1].set_title('Randomized bulk image')
+    #     make_axes_blank(ax[0])
+    #     make_axes_blank(ax[1])
+    #
+    #     plt.savefig(os.path.join(output_path, name + '_randomized_bulk.png'))
+    #     plt.close()
 
-        if num_of_channels == 1:
-            ax[0].imshow(orig_image, cmap='gray')
-            ax[1].imshow(random_bulk_image, cmap='gray')
-        elif num_of_channels == 2:
-            ax[0].imshow(orig_image)
-            ax[1].imshow(random_bulk_image)
-
-        ax[0].set_title(name)
-        ax[1].set_title('Randomized bulk image')
-        make_axes_blank(ax[0])
-        make_axes_blank(ax[1])
-
-        plt.savefig(os.path.join(output_path, name + '_randomized_bulk.png'))
-        plt.close()
 
 def find_image_channel_name(file_name):
     str_idx = file_name.find('Conf ')  # this is specific to our microscopes file name format
