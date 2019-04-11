@@ -12,7 +12,9 @@ from itertools import combinations
 #     Intensity in one channel vs. the other (to look at heterotypic vs homotypic droplets)
 
 
-def make_droplet_boxplot(data, output_dirs, input_args):
+def make_droplet_boxplot(data, output_dirs, input_params):
+
+    # data is a list where each element is a combined replicate_output
     pr_cols = [col for col in data[0].columns if 'partition' in col]  # need to identify all columns with partition ratios
     for channel in pr_cols:
         plot_data = [d[channel] for d in data]

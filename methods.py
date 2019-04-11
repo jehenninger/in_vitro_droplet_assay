@@ -93,7 +93,7 @@ def make_output_directories(input_params):
 
     output_dirs = {'output_parent': output_parent_dir,
                    'output_individual': os.path.join(output_parent_dir, 'individual'),
-                   'output_summary': os.path.join(output_parent_dir, 'summary'),
+                   # 'output_summary': os.path.join(output_parent_dir, 'summary'),
                    'output_individual_images': os.path.join(output_parent_dir,'individual','droplet_images')}
 
     # make folders if they don't exist
@@ -453,46 +453,46 @@ def subtract_background(input_image):
     return output_image, background_threshold
 
 
-def analyze_sample(folder, channels, rep_output, input_params, bulk_I, total_I):
-    sample_name = folder
-
-    # initialize outputs
-
-    #     sample_output = pd.DataFrame(columns=['sample', 'partition_ratio_mean_' + str(channels[0]),
-    #                                           'partition_ratio_std_' + str(channels[0]),
-    #                                           'condensed_fraction_mean_' + str(channels[0]),
-    #                                           'condensed_fraction_std_' + str(channels[0])])
-
-
-    pr_cols = [col for col in rep_output.columns if 'partition' in col]  # need to identify all columns with partition ratios
-
-    mean_pr_list = [[] for item in range(len(channels))]
-    std_pr_list = mean_pr_list.copy()
-    mean_cf_list = mean_pr_list.copy()
-    std_cf_list = mean_pr_list.copy()
-
-    for idx, p in enumerate(pr_cols):
-        mean_pr_list[idx].append(np.mean(rep_output[p])
-
-        condensed_fraction = np.sum(
-            replicate_output['total_I_' + str(channels[0])][replicate_output['replicate'] == r])/total_I[idx]
-
-        replicate_condensed_fraction.append(condensed_fraction)
-
-    sample_partition_ratio_mean = np.mean(replicate_partition_ratio)
-    sample_partition_ratio_std = np.std(replicate_partition_ratio)
-
-    sample_condensed_fraction_mean = np.mean(replicate_condensed_fraction)
-    sample_condensed_fraction_std = np.std(replicate_condensed_fraction)
-
-    sample_output = sample_output.append({'sample': sample_name,
-                                          'partition_ratio_mean_' + str(channels[0]): sample_partition_ratio_mean,
-                                          'partition_ratio_std_' + str(channels[0]): sample_partition_ratio_std,
-                                          'condensed_fraction_mean_' + str(channels[0]): sample_condensed_fraction_mean,
-                                          'condensed_fraction_std_' + str(channels[0]): sample_condensed_fraction_std},
-                                          ignore_index=True)
-
-    return sample_output
+# def analyze_sample(folder, channels, rep_output, input_params, bulk_I, total_I):
+#     sample_name = folder
+#
+#     # initialize outputs
+#
+#     #     sample_output = pd.DataFrame(columns=['sample', 'partition_ratio_mean_' + str(channels[0]),
+#     #                                           'partition_ratio_std_' + str(channels[0]),
+#     #                                           'condensed_fraction_mean_' + str(channels[0]),
+#     #                                           'condensed_fraction_std_' + str(channels[0])])
+#
+#
+#     pr_cols = [col for col in rep_output.columns if 'partition' in col]  # need to identify all columns with partition ratios
+#
+#     mean_pr_list = [[] for item in range(len(channels))]
+#     std_pr_list = mean_pr_list.copy()
+#     mean_cf_list = mean_pr_list.copy()
+#     std_cf_list = mean_pr_list.copy()
+#
+#     for idx, p in enumerate(pr_cols):
+#         mean_pr_list[idx].append(np.mean(rep_output[p])
+#
+#         condensed_fraction = np.sum(
+#             replicate_output['total_I_' + str(channels[0])][replicate_output['replicate'] == r])/total_I[idx]
+#
+#         replicate_condensed_fraction.append(condensed_fraction)
+#
+#     sample_partition_ratio_mean = np.mean(replicate_partition_ratio)
+#     sample_partition_ratio_std = np.std(replicate_partition_ratio)
+#
+#     sample_condensed_fraction_mean = np.mean(replicate_condensed_fraction)
+#     sample_condensed_fraction_std = np.std(replicate_condensed_fraction)
+#
+#     sample_output = sample_output.append({'sample': sample_name,
+#                                           'partition_ratio_mean_' + str(channels[0]): sample_partition_ratio_mean,
+#                                           'partition_ratio_std_' + str(channels[0]): sample_partition_ratio_std,
+#                                           'condensed_fraction_mean_' + str(channels[0]): sample_condensed_fraction_mean,
+#                                           'condensed_fraction_std_' + str(channels[0]): sample_condensed_fraction_std},
+#                                           ignore_index=True)
+#
+#     return sample_output
 
 
 def find_region_edge_pixels(a):  # this is a way to maybe find boundary pixels if we ever need to do that
