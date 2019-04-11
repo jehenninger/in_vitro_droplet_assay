@@ -3,6 +3,7 @@ import pandas as pd
 import numpy as np
 import os
 import math
+from itertools import combinations
 
 # Graphs to consider making:
 #     Boxplot and dots for all droplets
@@ -65,32 +66,34 @@ def make_droplet_size_histogram(data, output_dirs, input_args):
     plt.close()
 
 
-def make_droplet_intensity_scatter(data, output_dirs, input_args):
+def make_droplet_intensity_scatter(data, output_dirs, input_params):
     # for now, we only support this feature for 2 channels because it will be hard-coded
-    mean_intensity_cols = [col for col in data.columns if 'mean' in col]
+    mean_intensity_cols = [col for col in data.replicate_output.columns if 'mean' in col]
+    data = data.replicate_output
+    for pair in combinations(mean_intensity_cols, 2):
+        channel_a_name = pair[0][pair[0].find('ch') : pair[0].find('ch') + 5]
+        channel_b_name = pair[1][pair[1].find('ch') : pair[1].find('ch') + 5]
 
-    ## Jon start here. Need to find all pairwise combos of the channels and then make a scatter for each pair.
+        channel_a = data[pair[0]]
+        channel_b = data[pair[1]]
 
-    channel_a = data[mean_intensity_cols[0]]
-    channel_b = data[mean_intensity_cols[1]]
+        sample_name = data.sample_name
 
-    sample_name = np.unique(data['sample'])[0]
+        fig, ax = plt.subplots()
+        ax.plot(channel_a, channel_b, 'b.', markersize=5, markeredgewidth=0, alpha=0.3)
 
-    fig, ax = plt.subplots()
-    ax.plot(channel_a, channel_b, 'b.', markersize=5, markeredgewidth=0, alpha=0.3)
+        plt.ylabel(pair[1])
+        plt.xlabel(pair[0])
+        plt.title(sample_name)
+        plt.axis('tight')
 
-    plt.ylabel(mean_intensity_cols[1])
-    plt.xlabel(mean_intensity_cols[0])
-    plt.title(sample_name)
-    plt.axis('tight')
+        plt.tight_layout()
 
-    plt.tight_layout()
-
-    plt.savefig(os.path.join(output_dirs['output_individual'], sample_name + '_droplet_intensity_scatter.png'), dpi=300,
-                format='png')
-    plt.savefig(os.path.join(output_dirs['output_individual'], sample_name + '_droplet_intensity_scatter.pdf'),
-                format='pdf')
-    plt.close()
+        plt.savefig(os.path.join(output_dirs['output_individual'], sample_name + '_' + channel_a_name + '_' + channel_b_name + '_droplet_intensity_scatter.png'), dpi=300,
+                    format='png')
+        plt.savefig(os.path.join(output_dirs['output_individual'], sample_name + '_' + channel_a_name + '_' + channel_b_name + '_droplet_intensity_scatter.pdf'),
+                    format='pdf')
+        plt.close()
 
 def make_average_sample_graph(data, output_dirs, input_args):
 

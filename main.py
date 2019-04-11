@@ -50,6 +50,11 @@ samples = []
 # this loops over EXPERIMENT FOLDERS
 sample_writer = pd.ExcelWriter(os.path.join(input_params.output_dirs['output_summary'], 'summary_droplet_output.xlsx'),
                                   engine='xlsxwriter')
+replicate_writer = pd.ExcelWriter(
+    os.path.join(input_params.output_dirs['output_individual'], 'individual_droplet_output.xlsx'),
+    engine='xlsxwriter')
+
+sample_output = pd.DataFrame()
 for folder in dir_list:
     if not folder.startswith('.') and os.path.isdir(os.path.join(input_params.parent_path, folder)):
         print()
@@ -64,18 +69,16 @@ for folder in dir_list:
 
         rep_count = 1
 
-        replicate_writer = pd.ExcelWriter(
-            os.path.join(input_params.output_dirs['output_individual'], 'individual_droplet_output.xlsx'),
-            engine='xlsxwriter')
+
 
         # this loops over REPLICATES
         bulk_I = []
         total_I = []
-        data = SimpleNamespace()  # this is the session data object that will be passed to functions. Corresponds to one replicate
-        data.replicate_output = pd.DataFrame()
-
+        replicate_output = pd.DataFrame()
         input_params.replicate_count = 1
         for idx, file in enumerate(base_name_files):
+            data = SimpleNamespace()  # this is the session data object that will be passed to functions. Corresponds to one replicate
+
             sample_name = file.replace(file_ext, '')
             replicate_files = [os.path.join(input_params.parent_path, folder, r) for r in file_list if sample_name in r
                                and os.path.isfile(os.path.join(input_params.parent_path, folder, r))
@@ -87,6 +90,9 @@ for folder in dir_list:
 
             data = methods.find_scaffold(data, input_params)
             data = methods.find_droplets(data, input_params)
+            data = methods.measure_droplets(data, input_params)
+            replicate_output = replicate_output.append(data.replicate_output, ignore_index=True)
+
             bulk_I.append(data.bulk_I)
             total_I.append(data.total_I)
 
@@ -99,22 +105,16 @@ for folder in dir_list:
             stop_idx = total_length - start_idx
             sheet_name = sheet_name[start_idx:stop_idx]
 
-        data.replicate_output.to_excel(replicate_writer, sheet_name=sheet_name, index=False)
+        replicate_output.to_excel(replicate_writer, sheet_name=sheet_name, index=False)
 
         if len(data.replicate_output) > 0:
             grapher.make_droplet_size_histogram(data.replicate_output, input_params.output_dirs, input_params)
 
             if len(data.channel_names) > 1:
-                grapher.make_droplet_intensity_scatter(data.replicate_output, input_params.output_dirs, input_params)
+                grapher.make_droplet_intensity_scatter(data, input_params.output_dirs, input_params)
 
-        temp_sample_output = helper.analyze_sample(metadata_sample, input_args, replicate_output, bulk_I, total_I)
-
-        if sample_count == 0:
-            sample_output = temp_sample_output.copy()
-            sample_count = sample_count + 1
-        else:
+            temp_sample_output = methods.analyze_sample(folder, data.channel_names, replicate_output, input_params, bulk_I, total_I)
             sample_output = sample_output.append(temp_sample_output, ignore_index=True)
-            sample_count = sample_count + 1
 
         print(f'Finished sample {folder} at {datetime.now()}')
 

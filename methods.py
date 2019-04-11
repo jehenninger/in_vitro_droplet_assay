@@ -17,7 +17,6 @@ import cv2
 from types import SimpleNamespace
 
 
-
 def parse_arguments(parser):
 
     # required arguments
@@ -209,9 +208,9 @@ def find_droplets(data, input_params):
     circ_threshold = input_params.circ
     subset_area = input_params.r
 
-    subset_area_less_than_min_area_flag = False
+    data.subset_area_less_than_min_area_flag = False
     if subset_area < min_area_threshold:
-        subset_area_less_than_min_area_flag = True
+        data.subset_area_less_than_min_area_flag = True
 
     scaffold_mask = np.full(shape=(scaffold.shape[0], scaffold.shape[1]), fill_value=False, dtype=bool)
     for i, region in enumerate(scaffold_regionprops):
@@ -222,8 +221,7 @@ def find_droplets(data, input_params):
     # re-segment droplets after filtering them
     scaffold_filtered_binary_labeled = measure.label(scaffold_mask)
     scaffold_filtered_regionprops = measure.regionprops(scaffold_filtered_binary_labeled)
-
-
+    data.scaffold_filtered_regionprops = scaffold_filtered_regionprops
 
     # get measurements of bulk regions excluding droplets and total intensity of entire image (including droplets)
     # Not implemented yet
@@ -293,20 +291,42 @@ def find_droplets(data, input_params):
         bulk_mask = np.invert(scaffold_mask)
         bulk_I = np.zeros(len(channels))
         total_I = np.zeros(len(channels))
-
+        ## Jon start here and figure out how you want to handle multiple channels with bulk_I and total_I
         for idx, c in enumerate(channels):
             bulk_I[idx] = np.mean(scaffold[bulk_mask]) * 65536
             total_I[idx] = np.sum(scaffold) * 65536
 
-    # get measurements of regions from centered circle with radius sqrt(minimum droplet area)
-    # what we want:
-    # area, centroid, circularity, mean_intensity, max_intensity, mean intensity inside circle
+    data.bulk_I = bulk_I
+    data.total_I = total_I
+
+    return data
+
+def measure_droplets(data, input_params):
+
+    scaffold = data.scaffold
+    channels = data.channel_names
+    scaffold_filtered_regionprops = data.scaffold_filtered_regionprops
+    bulk_I = data.bulk_I
+    total_I = data.total_I
 
     # initialize labeled image to generate output of what droplets were called
     label_image = np.full(shape=(scaffold.shape[0], scaffold.shape[1]), fill_value=False, dtype=bool)
-    droplet_id_list = []
     droplet_id_centroid_r = []
     droplet_id_centroid_c = []
+
+    sample_list = []
+    replicate_list = []
+    droplet_id_list = []
+    subset_I_list = [[] for x in range(len(channels))]
+    mean_I_list = subset_I_list.copy()
+    max_I_list = subset_I_list.copy()
+    total_I_list = subset_I_list.copy()
+    bulk_I_list = subset_I_list.copy()
+    partition_ratio_list = subset_I_list.copy()
+    area_list = []
+    centroid_r_list = []
+    centroid_c_list = []
+    circularity_list = []
 
     # iterate over regions to collect information on individual droplets
     s = data.sample_name
@@ -316,8 +336,8 @@ def find_droplets(data, input_params):
         for i, region in enumerate(scaffold_filtered_regionprops):
             area = region.area
             use_min_area_flag = False  # this is if the subset area is less than the min droplet area parameter. In this case, we just use the min area.
-            if subset_area_less_than_min_area_flag:
-                if area < subset_area:
+            if data.subset_area_less_than_min_area_flag:
+                if area < input_params.r:
                     use_min_area_flag = True
 
             centroid_r, centroid_c = region.centroid
@@ -331,7 +351,7 @@ def find_droplets(data, input_params):
                 subset_coords_c = coords_c
             else:
                 subset_coords_r, subset_coords_c = draw.circle(r=centroid_r, c=centroid_c,
-                                                               radius=round(math.sqrt(subset_area)))
+                                                               radius=round(math.sqrt(input_params.r/math.pi)))
 
             # in cases where droplets are near the edge, the circle will go beyond the image. In that case,
             # we simply ignore the droplet
@@ -353,42 +373,57 @@ def find_droplets(data, input_params):
                     total_intensity = np.sum(img[coords_r, coords_c]) * 65536
 
                     if input_params.pr == 'sub':
-                        partition_ratio = subset_intensity/bulk_I[0]
+                        partition_ratio = subset_intensity/bulk_I[c_idx]
                     elif input_params.pr == 'mean':
-                        partition_ratio = mean_intensity/bulk_I[0]
+                        partition_ratio = mean_intensity/bulk_I[c_idx]
                     elif input_params.pr== 'max':
-                        partition_ratio = max_intensity/bulk_I[0]
+                        partition_ratio = max_intensity/bulk_I[c_idx]
                     else:
                         partition_ratio = -2  # just a sanity check. Should never happen.
 
-                    replicate_output = pd.concat(replicate_output,
-                                                 pd.DataFrame({'sample': s, 'replicate': r,
-                                                               'droplet_id': droplet_id,
-                                                               'subset_I_' + str(channels[c_idx]): subset_intensity,
-                                                               'mean_I_' + str(channels[c_idx]): mean_intensity,
-                                                               'max_I_' + str(channels[c_idx]): max_intensity,
-                                                               'total_I_' + str(channels[c_idx]): total_intensity,
-                                                               'bulk_I_' + str(channels[c_idx]): bulk_I[c_idx],
-                                                               'partition_ratio_' + str(channels[c_idx]): partition_ratio,
-                                                               'area': area, 'centroid_r': centroid_r, 'centroid_c': centroid_c,
-                                                               'circularity': circularity}),
-                                                 sort=False)
-
-
+                    sample_list.append(s)
+                    replicate_list.append(r)
+                    subset_I_list[c_idx].append(subset_intensity)
+                    mean_I_list[c_idx].append(mean_intensity)
+                    max_I_list[c_idx].append(max_intensity)
+                    total_I_list[c_idx].append(total_intensity)
+                    bulk_I_list[c_idx].append(bulk_I[c_idx])
+                    partition_ratio_list[c_idx].append(partition_ratio)
+                    area_list.append(area)
+                    centroid_r_list.append(centroid_r)
+                    centroid_c_list.append(centroid_c)
+                    circularity_list.append(circularity)
     else:
-        for c in channels:
-            replicate_output = pd.concat(replicate_output, pd.DataFrame({'sample': s, 'replicate': r,
-                                                        'droplet_id': 0,
-                                                        'subset_I_' + str(c): 0.0,
-                                                        'mean_I_' + str(c): 0.0,
-                                                        'max_I_' + str(c): 0.0,
-                                                        'total_I_' + str(c): 0.0,
-                                                        'bulk_I_' + str(c): 0.0,
-                                                        'partition_ratio_' + str(c): 0.0,
-                                                        'area': 0.0, 'centroid_r': 0.0,
-                                                        'centroid_c': 0.0,
-                                                        'circularity': 0.0}),
-                                                       sort=False)
+        for c_idx, c in channels:
+            sample_list.append(s)
+            replicate_list.append(r)
+            droplet_id_list.append(0.0)
+            subset_I_list[c_idx].append(0.0)
+            mean_I_list[c_idx].append(0.0)
+            max_I_list[c_idx].append(0.0)
+            total_I_list[c_idx].append(0.0)
+            bulk_I_list[c_idx].append(0.0)
+            partition_ratio_list[c_idx].append(0.0)
+            area_list.append(0.0)
+            centroid_r_list.append(0.0)
+            centroid_c_list.append(0.0)
+            circularity_list.append(0.0)
+
+    replicate_output = pd.DataFrame({'sample': sample_list,
+                                     'replicate': replicate_list,
+                                     'droplet_id': droplet_id_list,
+                                     'area': area_list,
+                                     'centroid_r': centroid_r_list,
+                                     'centroid_c': centroid_c_list,
+                                     'circularity': circularity_list})
+
+    for c_idx, c in channels:
+        replicate_output['subset_I_ch' + str(channels[c_idx])] = subset_I_list[c_idx]
+        replicate_output['mean_I_ch' + str(channels[c_idx])] = mean_I_list[c_idx]
+        replicate_output['max_I_ch' + str(channels[c_idx])] = max_I_list[c_idx]
+        replicate_output['total_I_ch' + str(channels[c_idx])] = total_I_list[c_idx]
+        replicate_output['bulk_I_ch' + str(channels[c_idx])] = bulk_I_list[c_idx]
+        replicate_output['partition_ratio_ch' + str(channels[c_idx])] = partition_ratio_list[c_idx]
 
     data.label_image = label_image
     data.replicate_output = replicate_output
@@ -418,132 +453,44 @@ def subtract_background(input_image):
     return output_image, background_threshold
 
 
-def analyze_sample(metadata, input_args, replicate_output, bulk_I, total_I):
-    sample_name = np.unique(metadata['experiment_name'])[0]
-    channels = np.unique(metadata['channel_id'])
-    num_of_channels = len(channels)
-
-    # get number of replicates
-    replicates = np.unique(metadata['replicate'])
+def analyze_sample(folder, channels, rep_output, input_params, bulk_I, total_I):
+    sample_name = folder
 
     # initialize outputs
-    if num_of_channels == 1:
-        sample_output = pd.DataFrame(columns=['sample', 'partition_ratio_mean_' + str(channels[0]),
-                                              'partition_ratio_std_' + str(channels[0]),
-                                              'condensed_fraction_mean_' + str(channels[0]),
-                                              'condensed_fraction_std_' + str(channels[0])])
-    elif num_of_channels == 2:
-        sample_output = pd.DataFrame(columns=['sample', 'partition_ratio_mean_' + str(channels[0]),
-                                              'partition_ratio_std_'            + str(channels[0]),
-                                              'condensed_fraction_mean_'        + str(channels[0]),
-                                              'condensed_fraction_std_'         + str(channels[0]),
-                                              'partition_ratio_mean_'           + str(channels[1]),
-                                              'partition_ratio_std_'            + str(channels[1]),
-                                              'condensed_fraction_mean_'        + str(channels[1]),
-                                              'condensed_fraction_std_'         + str(channels[1])])
-    if len(replicate_output) > 0:
-        replicate_partition_ratio = []
-        replicate_condensed_fraction = []
 
-        if num_of_channels == 1:
-            for idx, r in enumerate(replicates):
-                mean_partition_ratio = np.mean(
-                    replicate_output['partition_ratio_' + str(channels[0])][replicate_output['replicate'] == r])
+    #     sample_output = pd.DataFrame(columns=['sample', 'partition_ratio_mean_' + str(channels[0]),
+    #                                           'partition_ratio_std_' + str(channels[0]),
+    #                                           'condensed_fraction_mean_' + str(channels[0]),
+    #                                           'condensed_fraction_std_' + str(channels[0])])
 
-                replicate_partition_ratio.append(mean_partition_ratio)
 
-                condensed_fraction = np.sum(
-                    replicate_output['total_I_' + str(channels[0])][replicate_output['replicate'] == r])/total_I[idx]
+    pr_cols = [col for col in rep_output.columns if 'partition' in col]  # need to identify all columns with partition ratios
 
-                replicate_condensed_fraction.append(condensed_fraction)
+    mean_pr_list = [[] for item in range(len(channels))]
+    std_pr_list = mean_pr_list.copy()
+    mean_cf_list = mean_pr_list.copy()
+    std_cf_list = mean_pr_list.copy()
 
-            sample_partition_ratio_mean = np.mean(replicate_partition_ratio)
-            sample_partition_ratio_std = np.std(replicate_partition_ratio)
+    for idx, p in enumerate(pr_cols):
+        mean_pr_list[idx].append(np.mean(rep_output[p])
 
-            sample_condensed_fraction_mean = np.mean(replicate_condensed_fraction)
-            sample_condensed_fraction_std = np.std(replicate_condensed_fraction)
+        condensed_fraction = np.sum(
+            replicate_output['total_I_' + str(channels[0])][replicate_output['replicate'] == r])/total_I[idx]
 
-            sample_output = sample_output.append({'sample': sample_name,
-                                                  'partition_ratio_mean_' + str(channels[0]): sample_partition_ratio_mean,
-                                                  'partition_ratio_std_' + str(channels[0]): sample_partition_ratio_std,
-                                                  'condensed_fraction_mean_' + str(channels[0]): sample_condensed_fraction_mean,
-                                                  'condensed_fraction_std_' + str(channels[0]): sample_condensed_fraction_std},
-                                                  ignore_index=True)
+        replicate_condensed_fraction.append(condensed_fraction)
 
-        elif num_of_channels == 2:
-            count = 0
-            for idx, r in enumerate(replicates):
-                # client_a
-                mean_partition_ratio = np.mean(
-                    replicate_output['partition_ratio_' + str(channels[0])][replicate_output['replicate'] == r])
-                replicate_partition_ratio.append(mean_partition_ratio)
+    sample_partition_ratio_mean = np.mean(replicate_partition_ratio)
+    sample_partition_ratio_std = np.std(replicate_partition_ratio)
 
-                condensed_fraction = np.sum(
-                    replicate_output['total_I_' + str(channels[0])][replicate_output['replicate'] == r]) / total_I[count]
-                replicate_condensed_fraction.append(condensed_fraction)
+    sample_condensed_fraction_mean = np.mean(replicate_condensed_fraction)
+    sample_condensed_fraction_std = np.std(replicate_condensed_fraction)
 
-                # client_b
-                mean_partition_ratio = np.mean(
-                    replicate_output['partition_ratio_' + str(channels[1])][replicate_output['replicate'] == r])
-                replicate_partition_ratio.append(mean_partition_ratio)
-
-                condensed_fraction = np.sum(
-                    replicate_output['total_I_' + str(channels[1])][replicate_output['replicate'] == r]) / total_I[count+1]  #@Bug Should this be +1? I think so, but need to check.
-                replicate_condensed_fraction.append(condensed_fraction)
-
-                count = count + 2  # 2 here because we append both total_I's to the same list
-
-            sample_client_a_partition_ratio_mean = np.mean(replicate_partition_ratio[::2])  # every other since we append both clients
-            sample_client_a_partition_ratio_std = np.std(replicate_partition_ratio[::2])
-
-            sample_client_a_condensed_fraction_mean = np.mean(replicate_condensed_fraction[::2])
-            sample_client_a_condensed_fraction_std = np.std(replicate_condensed_fraction[::2])
-
-            sample_client_b_partition_ratio_mean = np.mean(
-                replicate_partition_ratio[1::2])  # every other since we append both clients
-            sample_client_b_partition_ratio_std = np.std(replicate_partition_ratio[1::2])
-
-            sample_client_b_condensed_fraction_mean = np.mean(replicate_condensed_fraction[1::2])
-            sample_client_b_condensed_fraction_std = np.std(replicate_condensed_fraction[1::2])
-
-            sample_output = sample_output.append({'sample': sample_name,
-                                                  'partition_ratio_mean_' +    str(channels[0]): sample_client_a_partition_ratio_mean,
-                                                  'partition_ratio_std_' +     str(channels[0]): sample_client_a_partition_ratio_std,
-                                                  'condensed_fraction_mean_' + str(channels[0]): sample_client_a_condensed_fraction_mean,
-                                                  'condensed_fraction_std_' +  str(channels[0]): sample_client_a_condensed_fraction_std,
-                                                  'partition_ratio_mean_' +    str(channels[1]): sample_client_b_partition_ratio_mean,
-                                                  'partition_ratio_std_' +     str(channels[1]): sample_client_b_partition_ratio_std,
-                                                  'condensed_fraction_mean_' + str(channels[1]): sample_client_b_condensed_fraction_mean,
-                                                  'condensed_fraction_std_' +  str(channels[1]): sample_client_b_condensed_fraction_std
-                                                  }, ignore_index=True)
-
-    else:
-        if num_of_channels == 1:
-            sample_output = sample_output.append({'sample': sample_name,
-                                                  'partition_ratio_mean_' + str(channels[0]): 0.0,
-                                                  'partition_ratio_std_' + str(channels[0]): 0.0,
-                                                  'condensed_fraction_mean_' + str(channels[0]): 0.0,
-                                                  'condensed_fraction_std_' + str(channels[0]): 0.0},
-                                                  ignore_index=True)
-        elif num_of_channels == 2:
-            sample_output = sample_output.append({'sample': sample_name,
-                                                  'partition_ratio_mean_' + str(
-                                                      channels[0]): 0.0,
-                                                  'partition_ratio_std_' + str(
-                                                      channels[0]): 0.0,
-                                                  'condensed_fraction_mean_' + str(
-                                                      channels[0]): 0.0,
-                                                  'condensed_fraction_std_' + str(
-                                                      channels[0]): 0.0,
-                                                  'partition_ratio_mean_' + str(
-                                                      channels[1]): 0,
-                                                  'partition_ratio_std_' + str(
-                                                      channels[1]): 0.0,
-                                                  'condensed_fraction_mean_' + str(
-                                                      channels[1]): 0.0,
-                                                  'condensed_fraction_std_' + str(
-                                                      channels[1]): 0.0
-                                                  }, ignore_index=True)
+    sample_output = sample_output.append({'sample': sample_name,
+                                          'partition_ratio_mean_' + str(channels[0]): sample_partition_ratio_mean,
+                                          'partition_ratio_std_' + str(channels[0]): sample_partition_ratio_std,
+                                          'condensed_fraction_mean_' + str(channels[0]): sample_condensed_fraction_mean,
+                                          'condensed_fraction_std_' + str(channels[0]): sample_condensed_fraction_std},
+                                          ignore_index=True)
 
     return sample_output
 
