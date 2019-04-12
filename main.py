@@ -36,7 +36,7 @@ from skimage import io, filters, measure, color, exposure, morphology, feature, 
 parser = argparse.ArgumentParser()
 
 input_params = methods.parse_arguments(parser)
-input_params.parent_dir = input_params.parent_dir.replace("Volumes","lab")
+input_params.parent_path = input_params.parent_path.replace("Volumes","lab")
 input_params.output_path = input_params.output_path.replace("Volumes","lab")
 
 input_params = methods.make_output_directories(input_params)
@@ -56,11 +56,13 @@ replicate_writer = pd.ExcelWriter(
 
 # sample_output = pd.DataFrame()
 graph_input = []
+sample_list = []
 for folder in dir_list:
     if not folder.startswith('.') and os.path.isdir(os.path.join(input_params.parent_path, folder)):
         print()
         print(f'Sample: {folder}')
-
+		
+        sample_list.append(folder)
         file_list = os.listdir(os.path.join(input_params.parent_path, folder))
 
         base_name_files = [f for f in file_list if file_ext in f
@@ -69,9 +71,6 @@ for folder in dir_list:
         base_name_files.sort(reverse=False)
 
         rep_count = 1
-
-
-
         # this loops over REPLICATES
         bulk_I = []
         total_I = []
@@ -82,8 +81,7 @@ for folder in dir_list:
 
             sample_name = file.replace(file_ext, '')
             replicate_files = [os.path.join(input_params.parent_path, folder, r) for r in file_list if sample_name in r
-                               and os.path.isfile(os.path.join(input_params.parent_path, folder, r))
-                               and file_ext not in r]
+                               and os.path.isfile(os.path.join(input_params.parent_path, folder, r))]
 
             replicate_files = np.sort(replicate_files)
 
@@ -138,7 +136,7 @@ replicate_writer.save()
 
 # make boxplot with all droplets
 if len(graph_input) > 0:
-    grapher.make_droplet_boxplot(graph_input, input_params.output_dirs, input_params)
+    grapher.make_droplet_boxplot(graph_input, sample_list, input_params.output_dirs, input_params)
 
 # if len(sample_output) > 0:
 #     grapher.make_average_sample_graph(sample_output, output_dirs, input_args)

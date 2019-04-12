@@ -11,3 +11,4 @@ test_MED_CTD/metadata_output/output_analysis_parameters.txt
 *.nd
 test_empty/metadata_output/output_analysis_parameters.txt
 *.txt
+*.pdf

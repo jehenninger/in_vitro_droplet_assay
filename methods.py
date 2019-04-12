@@ -292,9 +292,9 @@ def find_droplets(data, input_params):
         bulk_I = np.zeros(len(channels))
         total_I = np.zeros(len(channels))
         ## Jon start here and figure out how you want to handle multiple channels with bulk_I and total_I
-        for idx, c in enumerate(channels):
-            bulk_I[idx] = np.mean(scaffold[bulk_mask]) * 65536
-            total_I[idx] = np.sum(scaffold) * 65536
+        for c_idx, img in enumerate(data.channel_images):
+            bulk_I[c_idx] = np.mean(img[bulk_mask]) * 65536
+            total_I[c_idx] = np.sum(img) * 65536
 
     data.bulk_I = bulk_I
     data.total_I = total_I
@@ -318,11 +318,11 @@ def measure_droplets(data, input_params):
     replicate_list = []
     droplet_id_list = []
     subset_I_list = [[] for x in range(len(channels))]
-    mean_I_list = subset_I_list.copy()
-    max_I_list = subset_I_list.copy()
-    total_I_list = subset_I_list.copy()
-    bulk_I_list = subset_I_list.copy()
-    partition_ratio_list = subset_I_list.copy()
+    mean_I_list = [[] for x in range(len(channels))]
+    max_I_list = [[] for x in range(len(channels))]
+    total_I_list = [[] for x in range(len(channels))]
+    bulk_I_list = [[] for x in range(len(channels))]
+    partition_ratio_list = [[] for x in range(len(channels))]
     area_list = []
     centroid_r_list = []
     centroid_c_list = []
@@ -361,9 +361,16 @@ def measure_droplets(data, input_params):
             if edge_r_test and edge_c_test:
                 label_image[coords_r, coords_c] = True
                 droplet_id = i
-                droplet_id_list.append(droplet_id)
                 droplet_id_centroid_r.append(centroid_r)
                 droplet_id_centroid_c.append(centroid_c)
+
+                sample_list.append(s)
+                replicate_list.append(r)
+                droplet_id_list.append(droplet_id)
+                area_list.append(area)
+                centroid_r_list.append(centroid_r)
+                centroid_c_list.append(centroid_c)
+                circularity_list.append(circularity)
 
                 for c_idx, img in enumerate(data.channel_images):
                     mean_intensity = np.mean(img[coords_r, coords_c]) * 65536
@@ -372,7 +379,7 @@ def measure_droplets(data, input_params):
                     subset_intensity = np.mean(img[subset_coords_r, subset_coords_c]) * 65536
                     total_intensity = np.sum(img[coords_r, coords_c]) * 65536
 
-                    if input_params.pr == 'sub':
+                    if input_params.pr == 'subset':
                         partition_ratio = subset_intensity/bulk_I[c_idx]
                     elif input_params.pr == 'mean':
                         partition_ratio = mean_intensity/bulk_I[c_idx]
@@ -381,18 +388,13 @@ def measure_droplets(data, input_params):
                     else:
                         partition_ratio = -2  # just a sanity check. Should never happen.
 
-                    sample_list.append(s)
-                    replicate_list.append(r)
                     subset_I_list[c_idx].append(subset_intensity)
                     mean_I_list[c_idx].append(mean_intensity)
                     max_I_list[c_idx].append(max_intensity)
                     total_I_list[c_idx].append(total_intensity)
                     bulk_I_list[c_idx].append(bulk_I[c_idx])
                     partition_ratio_list[c_idx].append(partition_ratio)
-                    area_list.append(area)
-                    centroid_r_list.append(centroid_r)
-                    centroid_c_list.append(centroid_c)
-                    circularity_list.append(circularity)
+
     else:
         for c_idx, c in channels:
             sample_list.append(s)
@@ -417,13 +419,13 @@ def measure_droplets(data, input_params):
                                      'centroid_c': centroid_c_list,
                                      'circularity': circularity_list})
 
-    for c_idx, c in channels:
-        replicate_output['subset_I_ch' + str(channels[c_idx])] = subset_I_list[c_idx]
-        replicate_output['mean_I_ch' + str(channels[c_idx])] = mean_I_list[c_idx]
-        replicate_output['max_I_ch' + str(channels[c_idx])] = max_I_list[c_idx]
-        replicate_output['total_I_ch' + str(channels[c_idx])] = total_I_list[c_idx]
-        replicate_output['bulk_I_ch' + str(channels[c_idx])] = bulk_I_list[c_idx]
-        replicate_output['partition_ratio_ch' + str(channels[c_idx])] = partition_ratio_list[c_idx]
+    for c_idx, c in enumerate(channels):
+        replicate_output['subset_I_' + str(channels[c_idx])] = subset_I_list[c_idx]
+        replicate_output['mean_I_' + str(channels[c_idx])] = mean_I_list[c_idx]
+        replicate_output['max_I_' + str(channels[c_idx])] = max_I_list[c_idx]
+        replicate_output['total_I_' + str(channels[c_idx])] = total_I_list[c_idx]
+        replicate_output['bulk_I_' + str(channels[c_idx])] = bulk_I_list[c_idx]
+        replicate_output['partition_ratio_' + str(channels[c_idx])] = partition_ratio_list[c_idx]
 
     data.label_image = label_image
     data.replicate_output = replicate_output
@@ -506,10 +508,11 @@ def make_axes_blank(ax):
     ax.get_yaxis().set_ticks([])
 
 
-def make_droplet_image(output_path, data, droplet_list, droplet_r, droplet_c, input_params):
-
-    fig, ax = plt.subplot(figsize=(3, 3))
-    scaffold_image = exposure.rescale_intensity(data.scaffold_output_image)
+def make_droplet_image(output_path, data, droplet_list, droplet_c, droplet_r, input_params):
+	# NOTE: I know that c and r are swapped in the arguments compared to what I actually input. It works this way
+	# @jonH 190411
+    fig, ax = plt.subplots(1, 1, figsize=(3, 3))
+    scaffold_image = exposure.rescale_intensity(data.scaffold_output_img)
 
     label = np.zeros(shape=data.label_image.shape)
     label[data.label_image] = 1
@@ -570,6 +573,7 @@ def circ(r):
 
 
 def get_sample_name(nd_file_name):
+    nd_file_name = os.path.basename(nd_file_name)
     sample_name, ext = os.path.splitext(nd_file_name)
 
     return sample_name

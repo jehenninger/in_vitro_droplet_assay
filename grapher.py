@@ -12,14 +12,14 @@ from itertools import combinations
 #     Intensity in one channel vs. the other (to look at heterotypic vs homotypic droplets)
 
 
-def make_droplet_boxplot(data, output_dirs, input_params):
+def make_droplet_boxplot(data, groups, output_dirs, input_params):
 
     # data is a list where each element is a combined replicate_output
     pr_cols = [col for col in data[0].columns if 'partition' in col]  # need to identify all columns with partition ratios
     for channel in pr_cols:
         plot_data = [d[channel] for d in data]
-        groups = [np.unique(g['sample']) for g in data]
-        groups = [item for items in groups for item in items]
+        # groups = [np.unique(g['sample']) for g in data]
+	    # groups = [item for items in groups for item in items]
 
         fig, ax = plt.subplots()
 
@@ -71,13 +71,13 @@ def make_droplet_size_histogram(data, output_dirs, input_args):
 def make_droplet_intensity_scatter(data, output_dirs, input_params):
     # for now, we only support this feature for 2 channels because it will be hard-coded
     mean_intensity_cols = [col for col in data.replicate_output.columns if 'mean' in col]
-    data = data.replicate_output
+    rep_data = data.replicate_output
     for pair in combinations(mean_intensity_cols, 2):
         channel_a_name = pair[0][pair[0].find('ch') : pair[0].find('ch') + 5]
         channel_b_name = pair[1][pair[1].find('ch') : pair[1].find('ch') + 5]
 
-        channel_a = data[pair[0]]
-        channel_b = data[pair[1]]
+        channel_a = rep_data[pair[0]]
+        channel_b = rep_data[pair[1]]
 
         sample_name = data.sample_name
 
