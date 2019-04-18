@@ -49,9 +49,8 @@ def make_droplet_boxplot(data, groups, output_dirs, input_params):
         plt.close()
 
 
-def make_droplet_size_histogram(data, output_dirs, input_args):
+def make_droplet_size_histogram(sample_name, data, output_dirs, input_args):
     size_data = data['area'].tolist()
-    sample_name = np.unique(data['sample'])[0]
 
     fig, ax = plt.subplots()
     ax.hist(size_data, bins=50, density=True)
@@ -68,7 +67,7 @@ def make_droplet_size_histogram(data, output_dirs, input_args):
     plt.close()
 
 
-def make_droplet_intensity_scatter(data, output_dirs, input_params):
+def make_droplet_intensity_scatter(sample_name, data, output_dirs, input_params):
     # for now, we only support this feature for 2 channels because it will be hard-coded
     mean_intensity_cols = [col for col in data.replicate_output.columns if 'mean' in col]
     rep_data = data.replicate_output
@@ -78,8 +77,6 @@ def make_droplet_intensity_scatter(data, output_dirs, input_params):
 
         channel_a = rep_data[pair[0]]
         channel_b = rep_data[pair[1]]
-
-        sample_name = data.sample_name
 
         fig, ax = plt.subplots()
         ax.plot(channel_a, channel_b, 'b.', markersize=5, markeredgewidth=0, alpha=0.3)

@@ -15,6 +15,7 @@ import json
 from datetime import datetime
 import cv2
 from types import SimpleNamespace
+from pprint import pprint
 
 
 def parse_arguments(parser):
@@ -396,30 +397,33 @@ def measure_droplets(data, input_params):
                     partition_ratio_list[c_idx].append(partition_ratio)
 
     else:
-        for c_idx, c in channels:
-            sample_list.append(s)
-            replicate_list.append(r)
-            droplet_id_list.append(0.0)
+        sample_list.append(s)
+        replicate_list.append(r)
+        droplet_id_list.append(0.0)
+        area_list.append(0.0)
+        centroid_r_list.append(0.0)
+        centroid_c_list.append(0.0)
+        circularity_list.append(0.0)
+
+        for c_idx, c in enumerate(channels):
             subset_I_list[c_idx].append(0.0)
             mean_I_list[c_idx].append(0.0)
             max_I_list[c_idx].append(0.0)
             total_I_list[c_idx].append(0.0)
             bulk_I_list[c_idx].append(0.0)
             partition_ratio_list[c_idx].append(0.0)
-            area_list.append(0.0)
-            centroid_r_list.append(0.0)
-            centroid_c_list.append(0.0)
-            circularity_list.append(0.0)
-
+        
     replicate_output = pd.DataFrame({'sample': sample_list,
                                      'replicate': replicate_list,
                                      'droplet_id': droplet_id_list,
                                      'area': area_list,
                                      'centroid_r': centroid_r_list,
                                      'centroid_c': centroid_c_list,
-                                     'circularity': circularity_list})
+                                     'circularity': circularity_list},
+                                      columns=['sample', 'replicate', 'droplet_id', 'area',
+                                      'centroid_r', 'centroid_c', 'circularity'])
 
-    for c_idx, c in enumerate(channels):
+    for c_idx, c in enumerate(data.channel_images):
         replicate_output['subset_I_' + str(channels[c_idx])] = subset_I_list[c_idx]
         replicate_output['mean_I_' + str(channels[c_idx])] = mean_I_list[c_idx]
         replicate_output['max_I_' + str(channels[c_idx])] = max_I_list[c_idx]
@@ -439,8 +443,9 @@ def measure_droplets(data, input_params):
             #                    num_of_channels, str(s) + '_' + str(r), droplet_id_list, droplet_id_centroid_c, droplet_id_centroid_r,
             #                    input_args, random_bulk_image=random_bulk_image)
         else:
-            make_droplet_image(input_params.output_dirs['output_individual_images'], data, droplet_id_list, droplet_id_centroid_r,
-                               droplet_id_centroid_c, input_params)
+            if len(scaffold_filtered_regionprops) > 0:
+                make_droplet_image(input_params.output_dirs['output_individual_images'], data, droplet_id_list, droplet_id_centroid_r,
+                                   droplet_id_centroid_c, input_params)
 
     return data
 

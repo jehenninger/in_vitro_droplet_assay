@@ -1,4 +1,4 @@
-#!/Users/jon/PycharmProjects/in_vitro_droplet_assay/venv/bin/python
+#!/Users/jon/tools/venv/bin/python
 
 import matplotlib
 matplotlib.use('Agg')
@@ -8,8 +8,11 @@ matplotlib.rcParams['text.usetex'] = False
 matplotlib.rcParams['font.sans-serif'] = 'Arial'
 matplotlib.rcParams['font.family'] = 'sans-serif'
 
-import in_vitro_droplet_assay.methods as methods
-import in_vitro_droplet_assay.grapher as grapher
+#import in_vitro_droplet_assay.methods as methods
+#import in_vitro_droplet_assay.grapher as grapher
+import methods
+import grapher
+
 import pandas as pd
 import numpy as np
 import os
@@ -60,7 +63,8 @@ sample_list = []
 for folder in dir_list:
     if not folder.startswith('.') and os.path.isdir(os.path.join(input_params.parent_path, folder)):
         print()
-        print(f'Sample: {folder}')
+        # print(f'Sample: {folder}')
+        print('Sample: ', folder)
 		
         sample_list.append(folder)
         file_list = os.listdir(os.path.join(input_params.parent_path, folder))
@@ -108,16 +112,17 @@ for folder in dir_list:
 
         if len(replicate_output) > 0:
             graph_input.append(replicate_output)
-            grapher.make_droplet_size_histogram(replicate_output, input_params.output_dirs, input_params)
+            grapher.make_droplet_size_histogram(folder, replicate_output, input_params.output_dirs, input_params)
 
             if len(data.channel_names) > 1:
-                grapher.make_droplet_intensity_scatter(data, input_params.output_dirs, input_params)
+                grapher.make_droplet_intensity_scatter(folder, data, input_params.output_dirs, input_params)
 
             # temp_sample_output = methods.analyze_sample(folder, data.channel_names, replicate_output, input_params, bulk_I, total_I)
             # sample_output = sample_output.append(temp_sample_output, ignore_index=True)
 
-        print(f'Finished sample {folder} at {datetime.now()}')
-
+        # print(f'Finished sample {folder} at {datetime.now()}')
+        print('Finished sample ', folder, ' at ', datetime.now())
+		
 # sample_output.to_excel(sample_writer, sheet_name='summary', index=False)
 
 # adjust width of Excel columns in output to make for easier reading before writing the file
