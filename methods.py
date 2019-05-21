@@ -94,7 +94,7 @@ def make_output_directories(input_params):
 
     output_dirs = {'output_parent': output_parent_dir,
                    'output_individual': os.path.join(output_parent_dir, 'individual'),
-                   # 'output_summary': os.path.join(output_parent_dir, 'summary'),
+                   'output_summary': os.path.join(output_parent_dir, 'summary'),
                    'output_individual_images': os.path.join(output_parent_dir,'individual','droplet_images')}
 
     # make folders if they don't exist
@@ -223,6 +223,8 @@ def find_droplets(data, input_params):
     scaffold_filtered_binary_labeled = measure.label(scaffold_mask)
     scaffold_filtered_regionprops = measure.regionprops(scaffold_filtered_binary_labeled)
     data.scaffold_filtered_regionprops = scaffold_filtered_regionprops
+    
+    print('Found ', len(scaffold_filtered_regionprops), ' droplets')
 
     # get measurements of bulk regions excluding droplets and total intensity of entire image (including droplets)
     # Not implemented yet
@@ -290,25 +292,20 @@ def find_droplets(data, input_params):
         #     random_bulk_image[..., 2] = client_b_random_average_image  # B
     else:
         bulk_mask = np.invert(scaffold_mask)
-        bulk_I = np.zeros(len(channels))
-        total_I = np.zeros(len(channels))
-        ## Jon start here and figure out how you want to handle multiple channels with bulk_I and total_I
+        
+        bulk = {}
+        total = {}
         for c_idx, img in enumerate(data.channel_images):
-            bulk_I[c_idx] = np.mean(img[bulk_mask]) * 65536
-            total_I[c_idx] = np.sum(img) * 65536
+                bulk[data.channel_names[c_idx]] = np.mean(img[bulk_mask]) * 65536
+                total[data.channel_names[c_idx]] = np.sum(img) * 65536
+                
+    return data, bulk, total
 
-    data.bulk_I = bulk_I
-    data.total_I = total_I
-
-    return data
-
-def measure_droplets(data, input_params):
+def measure_droplets(data, input_params, bulk):
 
     scaffold = data.scaffold
     channels = data.channel_names
     scaffold_filtered_regionprops = data.scaffold_filtered_regionprops
-    bulk_I = data.bulk_I
-    total_I = data.total_I
 
     # initialize labeled image to generate output of what droplets were called
     label_image = np.full(shape=(scaffold.shape[0], scaffold.shape[1]), fill_value=False, dtype=bool)
@@ -381,11 +378,11 @@ def measure_droplets(data, input_params):
                     total_intensity = np.sum(img[coords_r, coords_c]) * 65536
 
                     if input_params.pr == 'subset':
-                        partition_ratio = subset_intensity/bulk_I[c_idx]
+                        partition_ratio = subset_intensity/bulk[data.channel_names[c_idx]]
                     elif input_params.pr == 'mean':
-                        partition_ratio = mean_intensity/bulk_I[c_idx]
+                        partition_ratio = mean_intensity/bulk[data.channel_names[c_idx]]
                     elif input_params.pr== 'max':
-                        partition_ratio = max_intensity/bulk_I[c_idx]
+                        partition_ratio = max_intensity/bulk[data.channel_names[c_idx]]
                     else:
                         partition_ratio = -2  # just a sanity check. Should never happen.
 
@@ -393,7 +390,7 @@ def measure_droplets(data, input_params):
                     mean_I_list[c_idx].append(mean_intensity)
                     max_I_list[c_idx].append(max_intensity)
                     total_I_list[c_idx].append(total_intensity)
-                    bulk_I_list[c_idx].append(bulk_I[c_idx])
+                    bulk_I_list[c_idx].append(data.channel_names[c_idx])
                     partition_ratio_list[c_idx].append(partition_ratio)
 
     else:
@@ -433,8 +430,6 @@ def measure_droplets(data, input_params):
 
     data.label_image = label_image
     data.replicate_output = replicate_output
-    data.bulk_I = bulk_I
-    data.total_I = total_I
 
     if input_params.output_image_flag:
         if input_params.randomize_bulk_flag:
@@ -460,46 +455,43 @@ def subtract_background(input_image):
     return output_image, background_threshold
 
 
-# def analyze_sample(folder, channels, rep_output, input_params, bulk_I, total_I):
-#     sample_name = folder
-#
-#     # initialize outputs
-#
-#     #     sample_output = pd.DataFrame(columns=['sample', 'partition_ratio_mean_' + str(channels[0]),
-#     #                                           'partition_ratio_std_' + str(channels[0]),
-#     #                                           'condensed_fraction_mean_' + str(channels[0]),
-#     #                                           'condensed_fraction_std_' + str(channels[0])])
-#
-#
-#     pr_cols = [col for col in rep_output.columns if 'partition' in col]  # need to identify all columns with partition ratios
-#
-#     mean_pr_list = [[] for item in range(len(channels))]
-#     std_pr_list = mean_pr_list.copy()
-#     mean_cf_list = mean_pr_list.copy()
-#     std_cf_list = mean_pr_list.copy()
-#
-#     for idx, p in enumerate(pr_cols):
-#         mean_pr_list[idx].append(np.mean(rep_output[p])
-#
-#         condensed_fraction = np.sum(
-#             replicate_output['total_I_' + str(channels[0])][replicate_output['replicate'] == r])/total_I[idx]
-#
-#         replicate_condensed_fraction.append(condensed_fraction)
-#
-#     sample_partition_ratio_mean = np.mean(replicate_partition_ratio)
-#     sample_partition_ratio_std = np.std(replicate_partition_ratio)
-#
-#     sample_condensed_fraction_mean = np.mean(replicate_condensed_fraction)
-#     sample_condensed_fraction_std = np.std(replicate_condensed_fraction)
-#
-#     sample_output = sample_output.append({'sample': sample_name,
-#                                           'partition_ratio_mean_' + str(channels[0]): sample_partition_ratio_mean,
-#                                           'partition_ratio_std_' + str(channels[0]): sample_partition_ratio_std,
-#                                           'condensed_fraction_mean_' + str(channels[0]): sample_condensed_fraction_mean,
-#                                           'condensed_fraction_std_' + str(channels[0]): sample_condensed_fraction_std},
-#                                           ignore_index=True)
-#
-#     return sample_output
+def calc_summary_stats(sample, ch_names, rep_data, input_params, bulk, total):
+    
+    pr_mean = {}
+    pr_std = {}
+    cf_mean = {}
+    cf_std = {}
+    sample_output = {'sample': sample}
+    for c in ch_names:
+        pr_cols = [col for col in rep_data.columns if all(['partition' in col, c in col])]
+        
+        if len(pr_cols) > 1:
+            print('Error: Found multiple partition ratio columns for channel ', c)
+            sys.exit(0)
+        elif len(pr_cols) == 0:
+            print('Error: Could not find partition ratio column for channel ', c)
+            sys.exit(0)
+        else:
+            pr_mean[c] = np.mean(rep_data[pr_cols])[0]
+            pr_std[c] = np.std(rep_data[pr_cols])[0]
+        
+            replicate_id = np.unique(rep_data['replicate'])
+            rep_total = []
+            for r in replicate_id:
+                rep_mask = rep_data['replicate'] == r
+                rep_total.append(np.sum(rep_data['total_I_' + str(c)][rep_mask]))
+    
+            cf_mean[c] = np.mean(np.divide(rep_total, total[c]))
+            cf_std[c] = np.std(np.divide(rep_total, total[c]))
+    
+        
+    for c in ch_names:
+        sample_output['partition_ratio_mean_' + str(c)] = pr_mean.get(c)
+        sample_output['partition_ratio_std_' + str(c)] = pr_std.get(c)
+        sample_output['condensed_fraction_mean_' + str(c)] = cf_mean.get(c)
+        sample_output['condensed_fraction_std_' + str(c)] = cf_std.get(c)
+    
+    return sample_output
 
 
 def find_region_edge_pixels(a):  # this is a way to maybe find boundary pixels if we ever need to do that

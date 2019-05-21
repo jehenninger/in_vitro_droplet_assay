@@ -1,4 +1,4 @@
-#!/Users/jon/tools/venv/bin/python
+#!/lab/solexa_young/scratch/jon_henninger/tools/venv/bin/python
 
 import matplotlib
 matplotlib.use('Agg')
@@ -49,24 +49,24 @@ dir_list = os.listdir(input_params.parent_path)
 dir_list.sort(reverse=False)
 file_ext = ".nd"
 
-# samples = []
 # this loops over EXPERIMENT FOLDERS
-# sample_writer = pd.ExcelWriter(os.path.join(input_params.output_dirs['output_summary'], 'summary_droplet_output.xlsx'),
-#                                  engine='xlsxwriter')
+sample_writer = pd.ExcelWriter(os.path.join(input_params.output_dirs['output_summary'], 'summary_droplet_output.xlsx'),
+                                 engine='xlsxwriter')
 replicate_writer = pd.ExcelWriter(
     os.path.join(input_params.output_dirs['output_individual'], 'individual_droplet_output.xlsx'),
     engine='xlsxwriter')
 
-# sample_output = pd.DataFrame()
 graph_input = []
 sample_list = []
+sample_output = pd.DataFrame()
+
 for folder in dir_list:
     if not folder.startswith('.') and os.path.isdir(os.path.join(input_params.parent_path, folder)):
         print()
         # print(f'Sample: {folder}')
         print('Sample: ', folder)
-		
         sample_list.append(folder)
+		
         file_list = os.listdir(os.path.join(input_params.parent_path, folder))
 
         base_name_files = [f for f in file_list if file_ext in f
@@ -74,10 +74,9 @@ for folder in dir_list:
 
         base_name_files.sort(reverse=False)
 
-        rep_count = 1
         # this loops over REPLICATES
-        bulk_I = []
-        total_I = []
+        bulk_sig = {}  # dictionary where key = channel name and value = list of bulk (non-droplet) intensities per replicate
+        total_sig = {} # dictionary where key = channel name and value = list of total intensities per replicate
         replicate_output = pd.DataFrame()
         input_params.replicate_count = 1
         for idx, file in enumerate(base_name_files):
@@ -90,17 +89,24 @@ for folder in dir_list:
             replicate_files = np.sort(replicate_files)
 
             data = methods.load_images(replicate_files, data, input_params, folder)
-
             data = methods.find_scaffold(data, input_params)
-            data = methods.find_droplets(data, input_params)
-            data = methods.measure_droplets(data, input_params)
+            data, rep_bulk, rep_total = methods.find_droplets(data, input_params)
+            data = methods.measure_droplets(data, input_params, rep_bulk)
             replicate_output = replicate_output.append(data.replicate_output, ignore_index=True)
-
-            bulk_I.append(data.bulk_I)
-            total_I.append(data.total_I)
+            
+            if len(bulk_sig) == 0:
+            	for c in data.channel_names:
+            		bulk_sig[c] = [rep_bulk[c]]
+            		total_sig[c] = [rep_total[c]]
+            		
+            else:
+            	for c in data.channel_names:
+            		bulk_sig[c].append(rep_bulk[c])
+            		total_sig[c].append(rep_total[c])
 
             input_params.replicate_count += 1
-
+		
+		
         sheet_name = folder
         if len(sheet_name) > 30:
             total_length = len(sheet_name)
@@ -117,13 +123,14 @@ for folder in dir_list:
             if len(data.channel_names) > 1:
                 grapher.make_droplet_intensity_scatter(folder, data, input_params.output_dirs, input_params)
 
-            # temp_sample_output = methods.analyze_sample(folder, data.channel_names, replicate_output, input_params, bulk_I, total_I)
-            # sample_output = sample_output.append(temp_sample_output, ignore_index=True)
-
-        # print(f'Finished sample {folder} at {datetime.now()}')
+            temp_sample_output = methods.calc_summary_stats(folder, data.channel_names, replicate_output, input_params, bulk_sig, total_sig)
+            sample_output = sample_output.append(temp_sample_output, ignore_index=True)
+            
+#         print(f'Finished sample {folder} at {datetime.now()}')
         print('Finished sample ', folder, ' at ', datetime.now())
 		
-# sample_output.to_excel(sample_writer, sheet_name='summary', index=False)
+sample_output = sample_output.reindex(sorted(sample_output.columns, reverse=True), axis=1)
+sample_output.to_excel(sample_writer, sheet_name='summary', index=False)
 
 # adjust width of Excel columns in output to make for easier reading before writing the file
 for key, sheet in replicate_writer.sheets.items():
@@ -131,13 +138,13 @@ for key, sheet in replicate_writer.sheets.items():
         col_width = len(name) + 2
         sheet.set_column(idx, idx, col_width)
 
-# for key, sheet in sample_writer.sheets.items():
-#     for idx, name in enumerate(sample_output.columns):
-#         col_width = len(name) + 2
-#         sheet.set_column(idx, idx, col_width)
+for key, sheet in sample_writer.sheets.items():
+    for idx, name in enumerate(sample_output.columns):
+        col_width = len(name) + 2
+        sheet.set_column(idx, idx, col_width)
 
 replicate_writer.save()
-# sample_writer.save()
+sample_writer.save()
 
 # make boxplot with all droplets
 if len(graph_input) > 0:
@@ -149,18 +156,8 @@ if len(graph_input) > 0:
 print()
 print('Finished making plots at: ', datetime.now())
 
-# write parameters that were used for this analysis
-# output_params = {'parent_path'    : input_params.metadata_path,
-#                  'time_of_analysis' : datetime.now(),
-#                  'tm'               : input_params.tm,
-#                  'r'                : input_params.r,
-#                  'min_a'            : input_params.min_a,
-#                  'max_a'            : input_params.max_a,
-#                  'circ'             : input_params.circ,
-#                  's'                : input_params.s,
-#                  'b'                : input_params.b,
-#                  'pr'               : input_params.pr,
-#                  }
-
 with open(os.path.join(input_params.output_dirs['output_parent'], 'output_analysis_parameters.txt'), 'w') as file:
         file.write(json.dumps(input_params, default=str))
+        
+print('---------------------------------')
+print('Completed at ', datetime.now())
