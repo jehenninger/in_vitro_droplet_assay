@@ -121,12 +121,11 @@ for folder in dir_list:
             grapher.make_droplet_size_histogram(folder, replicate_output, input_params.output_dirs, input_params)
 
             if len(data.channel_names) > 1:
-                grapher.make_droplet_intensity_scatter(folder, data, input_params.output_dirs, input_params)
+            	grapher.make_droplet_intensity_scatter(folder, data, input_params.output_dirs, input_params)
 
             temp_sample_output = methods.calc_summary_stats(folder, data.channel_names, replicate_output, input_params, bulk_sig, total_sig)
             sample_output = sample_output.append(temp_sample_output, ignore_index=True)
             
-#         print(f'Finished sample {folder} at {datetime.now()}')
         print('Finished sample ', folder, ' at ', datetime.now())
 		
 sample_output = sample_output.reindex(sorted(sample_output.columns, reverse=True), axis=1)
